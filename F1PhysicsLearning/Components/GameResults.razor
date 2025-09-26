@@ -1,0 +1,418 @@
+@using F1PhysicsLearning.Services
+@using F1PhysicsLearning.Models
+@inject GameService GameService
+@rendermode InteractiveServer
+
+<div class="results-container">
+    <div class="results-header">
+        <h1 class="results-title">🏁 Race Complete!</h1>
+        <div class="final-position">
+            <h2>@GameService.GetPositionDescription()</h2>
+        </div>
+    </div>
+
+    <div class="results-summary">
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="card-icon">📊</div>
+                <div class="card-content">
+                    <h3>@GameService.GetAccuracyPercentage()%</h3>
+                    <p>Accuracy Rate</p>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon">✅</div>
+                <div class="card-content">
+                    <h3>@gameState.CorrectAnswers</h3>
+                    <p>Correct Answers</p>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon">❌</div>
+                <div class="card-content">
+                    <h3>@gameState.IncorrectAnswers</h3>
+                    <p>Incorrect Answers</p>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon">⏱️</div>
+                <div class="card-content">
+                    <h3>@FormatTime(GameService.GetGameDuration())</h3>
+                    <p>Total Time</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="performance-analysis">
+        <h3><i class="bi bi-graph-up"></i> Performance Analysis</h3>
+        
+        <div class="performance-message">
+            @GetPerformanceMessage()
+        </div>
+
+        <div class="position-progress">
+            <h4>Grid Position Journey</h4>
+            <div class="position-bar-detailed">
+                <div class="start-marker" style="left: @GetStartPositionPercentage()%">
+                    <span>Start: P10</span>
+                </div>
+                <div class="end-marker" style="left: @GetEndPositionPercentage()%">
+                    <span>Final: P@gameState.CurrentPosition</span>
+                </div>
+                <div class="progress-line" style="left: @GetStartPositionPercentage()%; width: @GetProgressWidth()%"></div>
+            </div>
+        </div>
+    </div>
+
+    @if (gameState.Results.Any())
+    {
+        <div class="detailed-results">
+            <h3><i class="bi bi-list-check"></i> Question by Question</h3>
+            <div class="results-list">
+                @foreach (var result in gameState.Results.Select((r, i) => new { Result = r, Index = i }))
+                {
+                    <div class="result-item @(result.Result.IsCorrect ? "correct" : "incorrect")">
+                        <div class="result-number">@(result.Index + 1)</div>
+                        <div class="result-status">
+                            @if (result.Result.IsCorrect)
+                            {
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Correct</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill"></i>
+                                <span>Incorrect</span>
+                            }
+                        </div>
+                        <div class="result-time">@FormatTime(result.Result.TimeToAnswer)</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="results-actions">
+        <button class="btn btn-primary btn-lg" @onclick="PlayAgain">
+            <i class="bi bi-arrow-clockwise"></i> Race Again
+        </button>
+        <button class="btn btn-secondary btn-lg" @onclick="() => showDetailedStats = !showDetailedStats">
+            <i class="bi bi-bar-chart"></i> @(showDetailedStats ? "Hide" : "Show") Stats
+        </button>
+    </div>
+
+    @if (showDetailedStats)
+    {
+        <div class="detailed-stats">
+            <h3><i class="bi bi-clipboard-data"></i> Detailed Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <strong>Average Response Time:</strong>
+                    <span>@FormatTime(GetAverageResponseTime())</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Fastest Answer:</strong>
+                    <span>@FormatTime(GetFastestAnswer())</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Questions per Minute:</strong>
+                    <span>@GetQuestionsPerMinute().ToString("F1")</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Grid Positions Gained:</strong>
+                    <span>@GetPositionsGained()</span>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .results-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .results-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .results-title {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: #2c3e50;
+    }
+
+    .final-position {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 20px;
+        display: inline-block;
+    }
+
+    .results-summary {
+        margin-bottom: 2rem;
+    }
+
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        text-align: left;
+    }
+
+    .card-icon {
+        font-size: 2rem;
+        margin-right: 1rem;
+    }
+
+    .card-content h3 {
+        font-size: 2rem;
+        margin: 0;
+        color: #2c3e50;
+    }
+
+    .card-content p {
+        margin: 0;
+        color: #666;
+        font-size: 0.9rem;
+    }
+
+    .performance-analysis {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .performance-message {
+        background: #e8f4f8;
+        border-left: 4px solid #17a2b8;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .position-progress {
+        margin-top: 2rem;
+    }
+
+    .position-bar-detailed {
+        position: relative;
+        height: 60px;
+        background: linear-gradient(to right, #27ae60, #f39c12, #e74c3c);
+        border-radius: 30px;
+        margin: 1rem 0;
+    }
+
+    .start-marker, .end-marker {
+        position: absolute;
+        top: -40px;
+        transform: translateX(-50%);
+        background: white;
+        border: 2px solid #2c3e50;
+        border-radius: 15px;
+        padding: 0.3rem 0.8rem;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+
+    .end-marker {
+        top: 70px;
+    }
+
+    .progress-line {
+        position: absolute;
+        top: 50%;
+        height: 4px;
+        background: #2c3e50;
+        transform: translateY(-50%);
+    }
+
+    .detailed-results {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .results-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .result-item {
+        display: grid;
+        grid-template-columns: 40px 1fr auto;
+        gap: 1rem;
+        padding: 0.8rem;
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+        align-items: center;
+    }
+
+    .result-item.correct {
+        background: #d4edda;
+        border-left: 4px solid #28a745;
+    }
+
+    .result-item.incorrect {
+        background: #f8d7da;
+        border-left: 4px solid #dc3545;
+    }
+
+    .result-number {
+        font-weight: bold;
+        width: 30px;
+        height: 30px;
+        background: #6c757d;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .result-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .result-time {
+        font-family: monospace;
+        font-weight: bold;
+    }
+
+    .results-actions {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .results-actions .btn {
+        margin: 0 0.5rem;
+        border-radius: 25px;
+        padding: 1rem 2rem;
+    }
+
+    .detailed-stats {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 2rem;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.8rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+</style>
+
+@code {
+    private GameState gameState = new();
+    private bool showDetailedStats = false;
+
+    protected override void OnInitialized()
+    {
+        gameState = GameService.GetGameState();
+    }
+
+    private void PlayAgain()
+    {
+        GameService.StartNewGame();
+        StateHasChanged();
+    }
+
+    private string FormatTime(TimeSpan time)
+    {
+        if (time.TotalMinutes >= 1)
+            return $"{time.Minutes}m {time.Seconds}s";
+        else
+            return $"{time.TotalSeconds:F1}s";
+    }
+
+    private string GetPerformanceMessage()
+    {
+        var accuracy = GameService.GetAccuracyPercentage();
+        var position = gameState.CurrentPosition;
+
+        return (accuracy, position) switch
+        {
+            (>= 90, 1) => "🏆 Perfect! You've mastered F1 physics and earned pole position! You're ready for the championship!",
+            (>= 80, <= 3) => "🥉 Excellent work! You have a strong understanding of F1 physics and secured a front-row start!",
+            (>= 70, <= 10) => "🟢 Well done! You've got good F1 knowledge and finished in the points. Keep studying to reach the podium!",
+            (>= 60, <= 15) => "🟡 Not bad! You understand the basics but need more practice with advanced F1 physics concepts.",
+            _ => "🔴 Keep learning! F1 physics is complex, but with more practice you'll improve. Study the explanations and try again!"
+        };
+    }
+
+    private double GetStartPositionPercentage() => 50.0; // P10 = middle
+
+    private double GetEndPositionPercentage()
+    {
+        return Math.Max(0, Math.Min(100, (21 - gameState.CurrentPosition) * 5));
+    }
+
+    private double GetProgressWidth()
+    {
+        var start = GetStartPositionPercentage();
+        var end = GetEndPositionPercentage();
+        return Math.Abs(end - start);
+    }
+
+    private TimeSpan GetAverageResponseTime()
+    {
+        if (!gameState.Results.Any()) return TimeSpan.Zero;
+        var totalTicks = gameState.Results.Sum(r => r.TimeToAnswer.Ticks);
+        return new TimeSpan(totalTicks / gameState.Results.Count);
+    }
+
+    private TimeSpan GetFastestAnswer()
+    {
+        return gameState.Results.Any() ? 
+            gameState.Results.Min(r => r.TimeToAnswer) : 
+            TimeSpan.Zero;
+    }
+
+    private double GetQuestionsPerMinute()
+    {
+        var duration = GameService.GetGameDuration();
+        return duration.TotalMinutes > 0 ? 
+            gameState.QuestionsAnswered / duration.TotalMinutes : 
+            0;
+    }
+
+    private int GetPositionsGained()
+    {
+        return 10 - gameState.CurrentPosition; // Started at P10
+    }
+}

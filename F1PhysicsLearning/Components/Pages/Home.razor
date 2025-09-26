@@ -1,0 +1,90 @@
+﻿@page "/"
+@using F1PhysicsLearning.Services
+@using F1PhysicsLearning.Models
+@inject GameService GameService
+@rendermode InteractiveServer
+
+<PageTitle>F1 Physics Learning Platform</PageTitle>
+
+<div class="hero-section">
+    <div class="hero-content">
+        <h1 class="display-4">🏎️ F1 Physics Learning Platform</h1>
+        <p class="lead">Master Formula 1 physics through interactive gameplay!</p>
+        <p class="hero-description">
+            Answer questions correctly to move up the grid. Get them wrong and you'll drop back. 
+            Can you reach pole position?
+        </p>
+        
+        @if (!GameService.GetGameState().IsGameComplete && GameService.GetCurrentQuestion() == null)
+        {
+            <button class="btn btn-primary btn-lg start-button" @onclick="StartGame">
+                <i class="bi bi-flag-fill"></i> Start Your F1 Journey
+            </button>
+        }
+    </div>
+</div>
+
+@if (GameService.GetCurrentQuestion() != null && !GameService.GetGameState().IsGameComplete)
+{
+    <F1Quiz />
+}
+else if (GameService.GetGameState().IsGameComplete)
+{
+    <GameResults />
+}
+
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 4rem 0;
+        margin: -1rem -15px 2rem -15px;
+        border-radius: 0 0 20px 20px;
+    }
+
+    .hero-content {
+        text-align: center;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 0 2rem;
+    }
+
+    .hero-description {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-bottom: 2rem;
+    }
+
+    .start-button {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        border: none;
+        padding: 1rem 2rem;
+        font-size: 1.2rem;
+        border-radius: 50px;
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+        transition: all 0.3s ease;
+    }
+
+    .start-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+        background: linear-gradient(45deg, #c0392b, #e74c3c);
+    }
+
+    .bi-flag-fill {
+        margin-right: 0.5rem;
+    }
+</style>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Initialize component
+    }
+
+    private void StartGame()
+    {
+        GameService.StartNewGame();
+        StateHasChanged();
+    }
+}
