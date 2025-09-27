@@ -18,25 +18,44 @@
     <label style="margin-left:1rem">
         <input type="checkbox" @bind="showPath" /> Show path
     </label>
+        <div style="margin-top:0.5rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+            <div>
+                <label>Translate X: <input type="range" min="-200" max="200" step="1" @bind="translateX" @bind:event="oninput" /></label>
+                <div>@translateX px</div>
+            </div>
+            <div>
+                <label>Translate Y: <input type="range" min="-200" max="200" step="1" @bind="translateY" @bind:event="oninput" /></label>
+                <div>@translateY px</div>
+            </div>
+            <div>
+                <label>Scale: <input type="range" min="0.5" max="2" step="0.01" @bind="scale" @bind:event="oninput" /></label>
+                <div>@scale</div>
+            </div>
+            <div>
+                <button class="btn" @onclick="ApplyTransform">Apply</button>
+                <button class="btn" @onclick="ResetTransform">Reset</button>
+            </div>
+        </div>
     <button class="btn" style="margin-left:1rem" @onclick="Reset">Reset</button>
     <p class="muted">Drop your own images in <code>wwwroot/images/track.png</code> and <code>wwwroot/images/car.png</code> then tweak the path below.</p>
     <p class="muted">Tip: Draw the centerline in any vector tool and copy its SVG path "d" here.</p>
     
 </div>
 
-<svg @ref="svg" viewBox="0 0 847 555" preserveAspectRatio="xMidYMid meet" style="width:100%;max-width:960px;height:auto;border:1px solid #ccc;background:#9cd04a">
+<svg @ref="svg" viewBox="0 0 847 565" preserveAspectRatio="xMidYMid meet" style="width:100%;max-width:960px;height:auto;border:1px solid #ccc;background:#9cd04a">
     <!-- Track raster image underneath -->
-    <image href="images/track.png" x="0" y="0" width="847" height="555" preserveAspectRatio="none"></image>
+    <image href="images/track.png" x="-110" y="-75" width="847" height="565" preserveAspectRatio="none"></image>
 
     <!-- Optional: the path the car will follow (toggle visibility for debugging) -->
     <path id="racePath" d="@pathD"
           fill="none"
           stroke="#00bcd4"
           stroke-width="@((showPath ? 6 : 0))"
-          stroke-dasharray="10 8"/>
+          stroke-dasharray="10 8"
+          transform="translate(@translateX @translateY) scale(@scale)"/>
 
     <!-- The car sprite that will be moved/rotated by JS -->
-    <image id="carSprite" href="images/car.png" width="100" height="100" x="280" y="500" preserveAspectRatio="xMidYMid meet" />
+    <image id="carSprite" href="images/car.png" width="100" height="100" x="520" y="480" preserveAspectRatio="xMidYMid meet" />
 </svg>
 
 @code {
@@ -48,15 +67,15 @@
 
     // NOTE: Replace this with a path that matches your track image.
     // You can get it by drawing a path in a vector tool (Figma/Inkscape) over the centerline,
-    // then copying the path's "d" attribute. The viewBox here is 847x555 to match the screenshot.
+    // then copying the path's "d" attribute. The viewBox here is 847x565 to match the screenshot.
     private string pathD =
-        "M 720 500 C 650 520 580 523 510 520 C 420 516 330 505 260 490 C 180 472 120 440 95 400 C 70 360 80 310 130 285 C 175 263 236 270 286 288 C 335 305 380 340 415 350 C 455 362 500 352 520 320 C 540 288 530 245 505 210 C 475 166 420 145 360 138 C 300 131 245 144 215 165 C 180 190 170 220 180 265 C 188 303 205 329 245 350 C 290 374 355 374 390 390 C 435 411 450 451 440 490 C 430 528 390 545 350 545 C 300 545 250 528 205 510 C 150 487 95 463 65 430 C 35 397 30 355 45 320 C 60 285 95 255 140 235 C 200 208 280 205 350 215 C 420 225 480 250 540 260 C 600 270 675 260 710 230 C 750 197 758 160 748 130 C 734 88 695 58 650 44 C 595 26 520 30 470 40 C 420 50 370 73 335 105 C 300 137 280 178 282 210 C 285 255 318 290 360 310 C 410 334 475 342 520 350 C 585 362 640 380 685 405 C 721 425 746 452 758 480 C 770 508 762 515 720 500 z";
+        "M455.112 404C333.824 407.368 265.469 406.69 142.612 404C115.491 398.004 101.551 397.363 69.6119 381C62.688 378.119 54.6375 371.913 33.6119 353.5C7.24282 331.35 -0.023026 321.235 1.11189 307.5C2.21865 289.658 11.0689 282.31 54.1119 278C79.1942 278.992 93.3286 280.719 118.612 285L209.112 311.5C229.419 314.692 240.805 314.274 261.112 311.5C273.841 310.165 280.658 306.393 292.112 293C295.614 277.182 297.085 267.516 298.612 248.5C300.122 235.579 299.325 228.557 287.112 217.5C270.084 204.075 255.34 196.285 224.612 181.5L183.112 146.5C166.185 125.936 162.553 114.069 163.112 92.5C164.252 69.8158 167.742 57.6963 183.112 38C182.363 35.6948 212.43 15.1863 241.612 9.5C259.823 4.30919 272.176 2.04574 304.112 1C330.611 2.41292 344.747 3.75889 365.612 9.5C386.183 13.6806 395.456 18.9656 404.612 38C415.557 62.7294 420.546 77.4774 424.612 107.5L431.112 181.5C434.835 197.277 438.484 205.648 455.112 217.5C468.251 224.432 476.236 227.188 491.612 230L566.612 236C582.647 238.514 591.335 240.812 605.612 248.5C614.771 258.635 619.564 264.223 625.612 273.5C630.794 285.534 633.266 292.501 632.612 307.5C627.609 328.421 623.676 339.866 611.612 359C601.945 370.303 594.969 374.91 580.612 381C534.536 394.026 506.872 398.807 455.112 404Z";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
     _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js");
-        _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed });
+            _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed, startRotation = 50 });
     }
 
     private async Task Play()
@@ -104,5 +123,36 @@
         {
             try { await _module.DisposeAsync(); } catch { }
         }
+    }
+
+    // Alignment controls
+    private int translateX = 0;
+    private int translateY = 0;
+    private double scale = 1.0;
+
+    private async Task ApplyTransform()
+    {
+        if (_anim is not null)
+        {
+            await _anim.InvokeVoidAsync("setTransform", translateX, translateY, scale);
+        }
+        StateHasChanged();
+    }
+
+    private async Task ResetTransform()
+    {
+        translateX = 0;
+        translateY = 0;
+        scale = 1.0;
+        if (_anim is not null)
+            await _anim.InvokeVoidAsync("setTransform", translateX, translateY, scale);
+        StateHasChanged();
+    }
+
+    // Live update when sliders change
+    private async Task OnTranslateChanged(ChangeEventArgs e)
+    {
+        if (_anim is not null)
+            await _anim.InvokeVoidAsync("setTransform", translateX, translateY, scale);
     }
 }
