@@ -1,6 +1,7 @@
 @page "/cornering-quiz"
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Forms
+@implements IDisposable
 
 <PageTitle>Cornering Dynamics Quiz</PageTitle>
 
@@ -89,6 +90,30 @@ else
     var isMissing = stepChecked && chosen is null;
 
     <div class="bg-background-light rounded-lg border border-primary/20 shadow-lg p-6 max-w-6xl mx-auto">
+      @if (RaceMode || Timed)
+      {
+        <div class="mb-4 flex items-center justify-between">
+          @if (Timed)
+          {
+            <div class="text-sm font-semibold text-primary">Time left: @timeLeft s</div>
+          }
+          <div class="flex-1 mx-4 h-3 rounded-full bg-primary/10 overflow-hidden">
+            <div class="h-full bg-primary/60" style=@($"width:{Math.Round(userProgress*100)}%")></div>
+          </div>
+          <div class="text-xs text-gray-600">You</div>
+        </div>
+        <div class="space-y-2 mb-4">
+          @for (int i = 0; i < foes.Length; i++)
+          {
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div class="h-full bg-gray-500" style=@($"width:{Math.Round(foes[i]*100)}%")></div>
+              </div>
+              <span class="text-xs text-gray-500">Rival @(@i+1)</span>
+            </div>
+          }
+        </div>
+      }
       <div class="grid gap-6 md:grid-cols-5 md:items-start">
         <div class="md:col-span-2">
           <p class="text-primary font-bold text-sm mb-1">Question @(@current + 1)/@questions.Count</p>
@@ -152,9 +177,17 @@ else
   {
     <div class="max-w-3xl mx-auto rounded-lg border border-primary/30 bg-primary/10 px-4 py-6 text-center">
       <p class="text-xl font-semibold">Score: @CorrectCount / @questions.Count</p>
+      @if (RaceMode)
+      {
+        var placement = 1 + foes.Count(f => f > userProgress);
+        <p class="mt-2 text-gray-800 font-medium">
+          Race result: @(placement == 1 ? "You won!" : $"You finished {placement} of {foes.Length + 1}")
+        </p>
+      }
       <div class="mt-4 flex justify-center gap-3">
         <button class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="ResetAndStart">Restart</button>
         <a class="rounded-lg bg-primary text-white px-4 py-2 font-semibold" href="/cornering-quiz">Review full quiz</a>
+        <a class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" href="/race-menu">Difficulty menu</a>
       </div>
     </div>
   }
@@ -165,9 +198,19 @@ else
   private Dictionary<int, int> answers = new();
   [Parameter] public bool StepMode { get; set; } = false;
   [Parameter] public bool ShowExplanation { get; set; } = true;
+  [Parameter] public bool RaceMode { get; set; } = false;
+  [Parameter] public bool Timed { get; set; } = false;
+  [Parameter] public int TimeLimitSeconds { get; set; } = 90;
   private int current = 0;
   private bool stepChecked = false;
   private bool finished = false;
+  private bool started = false;
+  private int timeLeft;
+  private System.Timers.Timer? _timer;
+  private double userProgress = 0; // 0..1
+  private double[] foes = new double[2] { 0, 0 };
+  private double[] foeBase = new double[2] { 0.9, 0.8 }; // relative pace per question step
+  private readonly Random _rng = new Random();
 
   private readonly List<Question> questions = new()
   {
@@ -266,6 +309,11 @@ else
     current = 0;
     stepChecked = false;
     finished = false;
+    userProgress = 0; foes[0] = foes[1] = 0; started = true;
+    if (Timed)
+    {
+      StartTimer();
+    }
   }
 
   private void CheckCurrent()
@@ -277,13 +325,84 @@ else
   {
     if (current < questions.Count - 1)
     {
+      // progress: only correct answers advance the player
+      if (answers.TryGetValue(questions[current].Id, out var a) && a == questions[current].CorrectIndex)
+      {
+        userProgress = Math.Min(1, userProgress + (1.0 / questions.Count));
+      }
+      // opponents advance a bit each step
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var jitter = 0.8 + _rng.NextDouble() * 0.4; // 0.8..1.2
+        foes[i] = Math.Min(1, foes[i] + foeBase[i] * (1.0 / questions.Count) * jitter);
+      }
       current++;
       stepChecked = false;
     }
     else
     {
+      // last question: finalize progress once
+      if (answers.TryGetValue(questions[current].Id, out var a) && a == questions[current].CorrectIndex)
+      {
+        userProgress = Math.Min(1, userProgress + (1.0 / questions.Count));
+      }
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var jitter = 0.8 + _rng.NextDouble() * 0.4;
+        foes[i] = Math.Min(1, foes[i] + foeBase[i] * (1.0 / questions.Count) * jitter);
+      }
       finished = true;
+      StopTimer();
     }
+  }
+
+  private void StartTimer()
+  {
+    StopTimer();
+    timeLeft = TimeLimitSeconds;
+    _timer = new System.Timers.Timer(1000);
+    _timer.Elapsed += async (_, __) =>
+    {
+      if (finished) { StopTimer(); return; }
+      timeLeft = Math.Max(0, timeLeft - 1);
+      // advance opponents each tick
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var tickInc = foeBase[i] * (1.0 / (questions.Count * Math.Max(10, TimeLimitSeconds))); // small per-second bumps
+        foes[i] = Math.Min(1, foes[i] + tickInc);
+      }
+      if (timeLeft == 0)
+      {
+        finished = true;
+        StopTimer();
+      }
+      await InvokeAsync(StateHasChanged);
+    };
+    _timer.AutoReset = true;
+    _timer.Enabled = true;
+  }
+
+  private void StopTimer()
+  {
+    if (_timer is not null)
+    {
+      try { _timer.Stop(); _timer.Dispose(); } catch { }
+      _timer = null;
+    }
+  }
+
+  protected override void OnAfterRender(bool firstRender)
+  {
+    if (firstRender && StepMode && !started)
+    {
+      ResetAndStart();
+    }
+    base.OnAfterRender(firstRender);
+  }
+
+  public void Dispose()
+  {
+    StopTimer();
   }
 
   private record Question(int Number, string Text, List<string> Options, int CorrectIndex, Func<Question, string>? calculation = null, string? explanationHtml = null)
