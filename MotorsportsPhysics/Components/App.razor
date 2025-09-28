@@ -20,9 +20,9 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#3b82f6',
+                        primary: '#ea2a33',
                         'background-light': '#f8f6f6',
-                        'background-dark': '#1a1a1a',
+                        'background-dark': '#211111',
                     },
                     fontFamily: {
                         display: ['Space Grotesk', 'sans-serif'],
@@ -37,14 +37,10 @@
             }
         }
     </script>
-    <style>
-        html, body { margin: 0; }
-        html { background-color: #1a1a1a; }
-    </style>
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
-<body class="bg-background-dark font-display text-gray-200">
+<body class="bg-background-light font-display text-gray-800">
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
 </body>
