@@ -232,7 +232,7 @@ else
       explanationHtml: "Downforce increases normal load on the tires, increasing available frictional (lateral) force without increasing mass."),
 
     new(4, "A car of mass 800 kg takes a corner of radius 50 m at 20 m/s. What is the required centripetal force?",
-      new() { "A) 3,200 N", "B) 4,800 N", "C) 6,400 N", "D) 6,4000 N" }, 2,
+      new() { "A) 3,200 N", "B) 4,800 N", "C) 6,400 N", "D) 64,000 N" }, 2,
       calculation: q => {
         double m=800, v=20, r=50; var Fc = m * v * v / r; // 6400 N
         return $"Centripetal force F = m v^2 / r = 800 · 20^2 / 50 = 800 · 400 / 50 = 320,000 / 50 = <strong>{Fc:N0} N</strong>.";
