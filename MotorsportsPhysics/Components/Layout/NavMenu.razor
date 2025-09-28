@@ -1,13 +1,42 @@
-﻿﻿<nav style="width: 100%; background: #18181c; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 2.5rem 0.75rem 2.5rem; box-shadow: 0 2px 8px #0002; border-bottom: 1px solid #333;">
-    <div style="font-weight: bold; font-size: 1.35rem; letter-spacing: 1px; display: flex; align-items: center; gap: 0.7rem;">
-        PitData Insights
-        <img src="/favicon.png" alt="Favicon" style="height: 28px; width: 32px; vertical-align: middle;" />
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">MotorsportsPhysics</a>
     </div>
-    <ul style="list-style: none; display: flex; gap: 2.2rem; margin: 0; padding: 0; align-items: center;">
-        <li><a href="/" style="color: #fff; text-decoration: none; font-weight: 500;">Home</a></li>
-        <li><a href="/prediction" style="color: #fff; text-decoration: none; font-weight: 500;">Prediction</a></li>
-        <li><a href="/UpcomingGrandPrix" style="color: #fff; text-decoration: none; font-weight: 500;">Next GP</a></li>
-        <li><a href="/Strategy" style="color: #fff; text-decoration: none; font-weight: 500;">Strategy</a></li>
-        <li><a href="/about" style="color: #fff; text-decoration: none; font-weight: 500;">About</a></li>
-    </ul>
-</nav>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="counter">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="weather">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="track">
+                <span class="bi bi-flag-fill-nav-menu" aria-hidden="true"></span> Track Simulator
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="apex">
+                <span class="bi bi-flag-fill-nav-menu" aria-hidden="true"></span> Apex Demo
+            </NavLink>
+        </div>
+    </nav>
+</div>
+
