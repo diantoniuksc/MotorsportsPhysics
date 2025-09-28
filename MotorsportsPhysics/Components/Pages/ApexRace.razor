@@ -30,8 +30,8 @@
   </header>
 
   <!-- Hero video area replaced with our animated SVG over the track image -->
-  <main class="container mx-auto flex-1 px-4 sm:px-6 lg:px-8 py-8">
-    <div class="relative w-full max-w-4xl mx-auto aspect-[16/9] rounded-lg overflow-hidden shadow-lg mb-8">
+  <main class="container mx-auto max-w-6xl flex-1 px-4 sm:px-6 lg:px-8 py-8">
+  <div class="relative w-full max-w-5xl mx-auto aspect-[16/9] rounded-lg overflow-hidden shadow-lg mb-8">
       <div class="absolute inset-0">
         <svg @ref="svg" viewBox="0 0 800 450" class="w-full h-full">
           <image href="images/track.png" x="0" y="0" width="800" height="450" preserveAspectRatio="none"/>
@@ -46,7 +46,7 @@
     </div>
 
   <!-- Integrated quiz in step-by-step mode -->
-  <CorneringQuiz StepMode="true" />
+  <CorneringQuiz StepMode="true" ShowExplanation="false" />
   </main>
 </div>
 

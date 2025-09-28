@@ -88,13 +88,13 @@ else
     var isWrong = stepChecked && chosen is not null && chosen.Value != q.CorrectIndex;
     var isMissing = stepChecked && chosen is null;
 
-    <div class="bg-background-light rounded-lg border border-primary/20 shadow-lg p-6 max-w-3xl mx-auto">
-      <div class="flex flex-col md:flex-row md:items-start gap-6">
-        <div class="flex-1">
+    <div class="bg-background-light rounded-lg border border-primary/20 shadow-lg p-6 max-w-6xl mx-auto">
+      <div class="grid gap-6 md:grid-cols-5 md:items-start">
+        <div class="md:col-span-2">
           <p class="text-primary font-bold text-sm mb-1">Question @(@current + 1)/@questions.Count</p>
           <p class="text-lg font-bold text-gray-800">@q.Text</p>
         </div>
-        <div class="w-full md:w-1/2 space-y-3">
+  <div class="w-full md:col-span-3 space-y-3">
           @for (int i = 0; i < q.Options.Count; i++)
           {
             var opt = q.Options[i];
@@ -123,7 +123,10 @@ else
           {
             <p class="text-amber-700 font-semibold">Answer required. Correct answer: <strong>@q.LetterFor(q.CorrectIndex)</strong></p>
           }
-          <div class="mt-2 text-gray-800">@((MarkupString)q.GetExplanationHtml())</div>
+          @if (ShowExplanation)
+          {
+            <div class="mt-2 text-gray-800">@((MarkupString)q.GetExplanationHtml())</div>
+          }
         </div>
       }
 
@@ -161,6 +164,7 @@ else
   private bool submitted = false;
   private Dictionary<int, int> answers = new();
   [Parameter] public bool StepMode { get; set; } = false;
+  [Parameter] public bool ShowExplanation { get; set; } = true;
   private int current = 0;
   private bool stepChecked = false;
   private bool finished = false;
