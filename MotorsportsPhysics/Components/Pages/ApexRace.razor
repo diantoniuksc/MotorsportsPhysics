@@ -1,6 +1,7 @@
 @page "/apex"
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
+@using MotorsportsPhysics.Components.Pages
 @inject IJSRuntime JS
 
 <PageTitle>Apex Physics - Race &amp; Learn</PageTitle>
@@ -44,38 +45,8 @@
       </div>
     </div>
 
-    <!-- Sample content section from design -->
-  <div class="bg-background-light rounded-lg border border-primary/20 shadow-lg p-6">
-      <div class="flex flex-col md:flex-row md:items-start gap-6">
-        <div class="flex-1">
-          <p class="text-primary font-bold text-sm mb-1">Question 3/5</p>
-          <p class="text-lg font-bold text-gray-800">What happens to the car's weight distribution during a high-speed corner?</p>
-        </div>
-        <div class="w-full md:w-1/2 space-y-3">
-          <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all">
-            <input type="radio" name="wd" class="h-5 w-5" />
-            <span class="text-sm font-medium">Shifts forward, increasing front grip</span>
-          </label>
-          <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all">
-            <input type="radio" name="wd" class="h-5 w-5" />
-            <span class="text-sm font-medium">Shifts backward, increasing rear grip</span>
-          </label>
-          <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all">
-            <input type="radio" name="wd" class="h-5 w-5" />
-            <span class="text-sm font-medium">Remains balanced</span>
-          </label>
-          <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all">
-            <input type="radio" name="wd" class="h-5 w-5" />
-            <span class="text-sm font-medium">Shifts laterally, affecting tire load</span>
-          </label>
-        </div>
-      </div>
-      <div class="flex justify-center mt-6">
-        <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider hover:bg-opacity-90 transition-all">
-          <span>Submit Answer</span>
-        </button>
-      </div>
-    </div>
+    <!-- Integrated full quiz component -->
+    <CorneringQuiz />
   </main>
 </div>
 
