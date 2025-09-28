@@ -25,9 +25,9 @@ export function init(svgEl, opts = {}) {
   let angleAlpha = Number.isFinite(Number(opts.angleSmoothing)) ? Number(opts.angleSmoothing) : 0.18;
   let prevAngleDeg = undefined; // previous smoothed angle in degrees
 
-  // Keep width/height for centering
-  const carW = Number(car.getAttribute('width') || 48);
-  const carH = Number(car.getAttribute('height') || 28);
+  // Read width/height later during render so runtime attribute changes are respected
+  let carW = Number(car.getAttribute('width') || 48);
+  let carH = Number(car.getAttribute('height') || 28);
 
   const total = path.getTotalLength();
 
@@ -45,6 +45,9 @@ export function init(svgEl, opts = {}) {
   }
 
   function render(len) {
+    // Refresh car size in case attributes changed
+    carW = Number(car.getAttribute('width') || carW || 48);
+    carH = Number(car.getAttribute('height') || carH || 28);
     // position in path local coordinates
     const p = path.getPointAtLength(len);
     // compute tangent for rotation using a small delta
