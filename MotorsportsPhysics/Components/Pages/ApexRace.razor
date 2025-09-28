@@ -1,97 +1,64 @@
 @page "/apex"
-@using Microsoft.JSInterop
-@using Microsoft.AspNetCore.Components.Web
-@inject IJSRuntime JS
 
-
-<div class="dark relative flex min-h-screen w-full flex-col bg-background-dark text-gray-200">
-
-  <!-- Progress bar row -->
-  <main class="container mx-auto flex-1 px-4 sm:px-6 lg:px-8 py-6">
-    <div class="mb-6 space-y-2">
-      <div class="flex items-center justify-between text-gray-400 text-xs">
-        <span>Race Progress</span>
-        <span class="font-bold text-gray-200">Lap 3/5</span>
-      </div>
-      <div class="h-1.5 w-full rounded-full bg-primary/30 overflow-hidden">
-        <div class="h-full rounded-full bg-primary" style="width:60%"></div>
-      </div>
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Apex Physics - Race &amp; Learn</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+        darkMode: "class",
+        theme: {
+        extend: {
+        colors: {
+        primary: "#3b82f6",
+        "background-light": "#f8f6f6",
+        "background-dark": "#555555",
+        },
+        fontFamily: {
+        display: ["Space Grotesk", "sans-serif"],
+        },
+        borderRadius: {
+        DEFAULT: "0.25rem",
+        lg: "0.5rem",
+        xl: "0.75rem",
+        full: "9999px",
+        },
+        },
+        },
+        };
+    </script>
+    <style>
+        body {
+        font-family: "Space Grotesk", sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display text-gray-200">
+    <div class="flex justify-center items-center bg-background-dark">
+        <svg id="heroSvg" viewBox="0 0 @_width @_height" width="@_width" height="@_height" preserveAspectRatio="none">
+            <image href="images/track.png" x="0" y="0" width="@_width" height="@_height" preserveAspectRatio="none" rx="20" ry="20"/>
+            <path id="racePath" d="M455.112 404C333.824 407.368 265.469 406.69 142.612 404C115.491 398.004 101.551 397.363 69.6119 381C62.688 378.119 54.6375 371.913 33.6119 353.5C7.24282 331.35 -0.023026 321.235 1.11189 307.5C2.21865 289.658 11.0689 282.31 54.1119 278C79.1942 278.992 93.3286 280.719 118.612 285L209.112 311.5C229.419 314.692 240.805 314.274 261.112 311.5C273.841 310.165 280.658 306.393 292.112 293C295.614 277.182 297.085 267.516 298.612 248.5C300.122 235.579 299.325 228.557 287.112 217.5C270.084 204.075 255.34 196.285 224.612 181.5L183.112 146.5C166.185 125.936 162.553 114.069 163.112 92.5C164.252 69.8158 167.742 57.6963 183.112 38C182.363 35.6948 212.43 15.1863 241.612 9.5C259.823 4.30919 272.176 2.04574 304.112 1C330.611 2.41292 344.747 3.75889 365.612 9.5C386.183 13.6806 395.456 18.9656 404.612 38C415.557 62.7294 420.546 77.4774 424.612 107.5L431.112 181.5C434.835 197.277 438.484 205.648 455.112 217.5C468.251 224.432 476.236 227.188 491.612 230L566.612 236C582.647 238.514 591.335 240.812 605.612 248.5C614.771 258.635 619.564 264.223 625.612 273.5C630.794 285.534 633.266 292.501 632.612 307.5C627.609 328.421 623.676 339.866 611.612 359C601.945 370.303 594.969 374.91 580.612 381C534.536 394.026 506.872 398.807 455.112 404Z" fill="none" stroke="#00bcd4" stroke-width="0" />
+            <image id="carSprite" href="images/car.png" width="70" height="40" x="420" y="500"/>
+        </svg>
     </div>
+    <script type="module">
+        import { init } from '/js/trackSim.js';
+        const svg = document.querySelector('#heroSvg');
+        if (svg) {
+        const anim = init(svg, { speed: 140, startRotation: 50, angleSmoothing: 0.18 });
+        anim.play();
+        }
+    </script>
 
-    <!-- Hero + Question in a responsive grid so both are visible on load -->
-    <div class="md:grid md:grid-cols-5 md:gap-6 items-start">
-      <!-- Hero area with animation (capped height for a natural feel) -->
-      <div class="relative w-full rounded-lg overflow-hidden shadow-lg mb-6 md:mb-0 md:col-span-3 h-[220px] sm:h-[280px] md:h-[340px] lg:h-[400px]">
-        <div class="absolute inset-0">
-          <svg @ref="svg" viewBox="0 0 847 565" class="w-full h-full">
-            <image href="images/track.png" x="0" y="0" width="847" height="565" preserveAspectRatio="none"/>
-            <path id="racePath" d="@pathD" fill="none" stroke="#00bcd4" stroke-width="0" />
-            <image id="carSprite" href="images/car.png" width="60" height="34" x="420" y="500"/>
-          </svg>
-        </div>
-        <div class="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 to-transparent"></div>
-        <div class="absolute bottom-0 left-0 right-0">
-          <div class="mx-0 mb-2 h-1 w-full bg-teal-400/90"></div>
-          <div class="p-4 sm:p-6 text-white">
-            <h2 class="text-2xl sm:text-3xl font-bold">Cornering Dynamics</h2>
-          </div>
-        </div>
-      </div>
+</body></html>
 
-      <!-- Question card -->
-      <div class="bg-background-dark/40 rounded-lg border border-primary/30 shadow-lg p-6 md:col-span-2">
-        <div class="flex flex-col md:flex-row md:items-start gap-6">
-          <div class="flex-1">
-            <p class="text-primary font-bold text-sm mb-1">Question 3/5</p>
-            <p class="text-lg font-bold text-white">What happens to the car's weight distribution during a high-speed corner?</p>
-          </div>
-          <div class="w-full md:w-full space-y-3">
-            <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all text-gray-300">
-              <input type="radio" name="wd" class="h-5 w-5" />
-              <span class="text-sm font-medium">Shifts forward, increasing front grip</span>
-            </label>
-            <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 bg-primary/20 text-white cursor-pointer transition-all">
-              <input type="radio" name="wd" class="h-5 w-5" />
-              <span class="text-sm font-medium">Shifts backward, increasing rear grip</span>
-            </label>
-            <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all text-gray-300">
-              <input type="radio" name="wd" class="h-5 w-5" />
-              <span class="text-sm font-medium">Remains balanced</span>
-            </label>
-            <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all text-gray-300">
-              <input type="radio" name="wd" class="h-5 w-5" />
-              <span class="text-sm font-medium">Shifts laterally, affecting tire load</span>
-            </label>
-          </div>
-        </div>
-        <div class="flex justify-center mt-6">
-          <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider hover:bg-opacity-90 transition-all shadow-lg shadow-primary/30">
-            <span>Submit Answer</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- (kept for spacing on small screens) -->
-    
-    
-  </main>
-</div>
-
-@code {
-  private ElementReference svg;
-  private IJSObjectReference? _module;
-  private IJSObjectReference? _anim;
-  private int speed = 140;
-
-  private string pathD =
-    "M455.112 404C333.824 407.368 265.469 406.69 142.612 404C115.491 398.004 101.551 397.363 69.6119 381C62.688 378.119 54.6375 371.913 33.6119 353.5C7.24282 331.35 -0.023026 321.235 1.11189 307.5C2.21865 289.658 11.0689 282.31 54.1119 278C79.1942 278.992 93.3286 280.719 118.612 285L209.112 311.5C229.419 314.692 240.805 314.274 261.112 311.5C273.841 310.165 280.658 306.393 292.112 293C295.614 277.182 297.085 267.516 298.612 248.5C300.122 235.579 299.325 228.557 287.112 217.5C270.084 204.075 255.34 196.285 224.612 181.5L183.112 146.5C166.185 125.936 162.553 114.069 163.112 92.5C164.252 69.8158 167.742 57.6963 183.112 38C182.363 35.6948 212.43 15.1863 241.612 9.5C259.823 4.30919 272.176 2.04574 304.112 1C330.611 2.41292 344.747 3.75889 365.612 9.5C386.183 13.6806 395.456 18.9656 404.612 38C415.557 62.7294 420.546 77.4774 424.612 107.5L431.112 181.5C434.835 197.277 438.484 205.648 455.112 217.5C468.251 224.432 476.236 227.188 491.612 230L566.612 236C582.647 238.514 591.335 240.812 605.612 248.5C614.771 258.635 619.564 264.223 625.612 273.5C630.794 285.534 633.266 292.501 632.612 307.5C627.609 328.421 623.676 339.866 611.612 359C601.945 370.303 594.969 374.91 580.612 381C534.536 394.026 506.872 398.807 455.112 404Z";
-
-  protected override async Task OnAfterRenderAsync(bool firstRender)
-  {
-    if (!firstRender) return;
-    _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js");
-    _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed, startRotation = 50, angleSmoothing = 0.18 });
-    await _anim.InvokeVoidAsync("play");
-  }
+@code
+{
+    private int _width = 1817 - 400;
+    private int _height = 1080 - 455;
 }
