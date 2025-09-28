@@ -1,0 +1,421 @@
+@page "/cornering-quiz"
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Forms
+@implements IDisposable
+
+<PageTitle>Cornering Dynamics Quiz</PageTitle>
+
+@if (!StepMode)
+{
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 pt-0 pb-8">
+    <h1 class="text-2xl font-bold mb-4">Cornering Dynamics Quiz</h1>
+    <p class="text-gray-700 mb-6">Answer all questions, then click "Check answers" to see your score and explanations.</p>
+
+    @if (submitted)
+    {
+      <div class="mb-6 rounded-md border border-primary/30 bg-primary/10 px-4 py-3">
+        <p class="font-semibold">Score: @CorrectCount / @questions.Count</p>
+        @if (UnansweredCount > 0)
+        {
+          <p class="text-sm text-gray-700">You left @UnansweredCount question(s) unanswered.</p>
+        }
+      </div>
+    }
+
+    <EditForm Model="this" OnValidSubmit="OnSubmit">
+      <DataAnnotationsValidator />
+
+      @foreach (var q in questions)
+      {
+        var chosen = answers.TryGetValue(q.Id, out var sel) ? sel : (int?)null;
+        var isCorrect = submitted && chosen is not null && chosen.Value == q.CorrectIndex;
+        var isWrong = submitted && chosen is not null && chosen.Value != q.CorrectIndex;
+        var isMissing = submitted && chosen is null;
+
+        <fieldset @key=q.Id class="mb-6 rounded-lg border p-4 @(isCorrect ? "border-green-400 bg-green-50" : isWrong ? "border-red-400 bg-red-50" : isMissing ? "border-amber-400 bg-amber-50" : "border-primary/20 bg-background-light")">
+          <legend class="px-1 font-semibold">@q.Number. @q.Text</legend>
+
+          <div class="mt-2 space-y-2">
+            @for (int i = 0; i < q.Options.Count; i++)
+            {
+              var opt = q.Options[i];
+              var idx = i;
+              var selected = chosen.HasValue && chosen.Value == idx;
+              <label class="flex items-start gap-3 rounded-md border border-transparent p-2 hover:bg-primary/10 cursor-pointer">
+                <input type="radio" name=@($"q{q.Id}") checked="@selected" @onchange="_ => Select(q.Id, idx)" class="mt-1" />
+                <span>@opt</span>
+              </label>
+            }
+          </div>
+
+          @if (submitted)
+          {
+            <div class="mt-3 text-sm">
+              @if (isCorrect)
+              {
+                <p class="text-green-700 font-medium">Correct.</p>
+              }
+              else if (isWrong)
+              {
+                <p class="text-red-700 font-medium">Not quite. Correct answer: <strong>@q.LetterFor(q.CorrectIndex)</strong></p>
+              }
+              else if (isMissing)
+              {
+                <p class="text-amber-700 font-medium">Answer required. Correct answer: <strong>@q.LetterFor(q.CorrectIndex)</strong></p>
+              }
+
+              <div class="mt-2 text-gray-800">
+                @((MarkupString)q.GetExplanationHtml())
+              </div>
+            </div>
+          }
+        </fieldset>
+      }
+
+      <div class="flex gap-3">
+        <button type="submit" class="rounded-md bg-primary px-4 py-2 font-semibold text-white hover:bg-opacity-90">Check answers</button>
+        <button type="button" class="rounded-md border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="Reset">Reset</button>
+      </div>
+    </EditForm>
+  </div>
+}
+else
+{
+  @if (!finished)
+  {
+    var q = questions[current];
+    var chosen = answers.TryGetValue(q.Id, out var sel) ? sel : (int?)null;
+    var isCorrect = stepChecked && chosen is not null && chosen.Value == q.CorrectIndex;
+    var isWrong = stepChecked && chosen is not null && chosen.Value != q.CorrectIndex;
+    var isMissing = stepChecked && chosen is null;
+
+    <div class="bg-background-light rounded-lg border border-primary/20 shadow-lg p-6 max-w-6xl mx-auto">
+      @if (RaceMode || Timed)
+      {
+        <div class="mb-4 flex items-center justify-between">
+          @if (Timed)
+          {
+            <div class="text-sm font-semibold text-primary">Time left: @timeLeft s</div>
+          }
+          <div class="flex-1 mx-4 h-3 rounded-full bg-primary/10 overflow-hidden">
+            <div class="h-full bg-primary/60" style=@($"width:{Math.Round(userProgress*100)}%")></div>
+          </div>
+          <div class="text-xs text-gray-600">You</div>
+        </div>
+        <div class="space-y-2 mb-4">
+          @for (int i = 0; i < foes.Length; i++)
+          {
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div class="h-full bg-gray-500" style=@($"width:{Math.Round(foes[i]*100)}%")></div>
+              </div>
+              <span class="text-xs text-gray-500">Rival @(@i+1)</span>
+            </div>
+          }
+        </div>
+      }
+      <div class="grid gap-6 md:grid-cols-5 md:items-start">
+        <div class="md:col-span-2">
+          <p class="text-primary font-bold text-sm mb-1">Question @(@current + 1)/@questions.Count</p>
+          <p class="text-lg font-bold text-gray-800">@q.Text</p>
+        </div>
+  <div class="w-full md:col-span-3 space-y-3">
+          @for (int i = 0; i < q.Options.Count; i++)
+          {
+            var opt = q.Options[i];
+            var idx = i;
+            var selected = chosen.HasValue && chosen.Value == idx;
+            <label class="flex items-center gap-4 rounded-lg border border-primary/20 p-4 hover:bg-primary/10 cursor-pointer transition-all">
+              <input type="radio" name=@($"q{q.Id}") class="h-5 w-5" checked="@selected" @onchange="_ => Select(q.Id, idx)" />
+              <span class="text-sm font-medium">@opt</span>
+            </label>
+          }
+        </div>
+      </div>
+
+      @if (stepChecked)
+      {
+        <div class="mt-4 text-sm">
+          @if (isCorrect)
+          {
+            <p class="text-green-700 font-semibold">Correct.</p>
+          }
+          else if (isWrong)
+          {
+            <p class="text-red-700 font-semibold">Not quite. Correct answer: <strong>@q.LetterFor(q.CorrectIndex)</strong></p>
+          }
+          else if (isMissing)
+          {
+            <p class="text-amber-700 font-semibold">Answer required. Correct answer: <strong>@q.LetterFor(q.CorrectIndex)</strong></p>
+          }
+          @if (ShowExplanation)
+          {
+            <div class="mt-2 text-gray-800">@((MarkupString)q.GetExplanationHtml())</div>
+          }
+        </div>
+      }
+
+      <div class="flex justify-center mt-6 gap-3">
+        @if (!stepChecked)
+        {
+          <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider disabled:opacity-50"
+                  disabled="@(chosen is null)" @onclick="CheckCurrent">
+            <span>Check answer</span>
+          </button>
+        }
+        else
+        {
+          <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider"
+                  @onclick="Next">
+            <span>@(current < questions.Count - 1 ? "Next" : "Finish")</span>
+          </button>
+        }
+      </div>
+    </div>
+  }
+  else
+  {
+    <div class="max-w-3xl mx-auto rounded-lg border border-primary/30 bg-primary/10 px-4 py-6 text-center">
+      <p class="text-xl font-semibold">Score: @CorrectCount / @questions.Count</p>
+      @if (RaceMode)
+      {
+        var placement = 1 + foes.Count(f => f > userProgress);
+        <p class="mt-2 text-gray-800 font-medium">
+          Race result: @(placement == 1 ? "You won!" : $"You finished {placement} of {foes.Length + 1}")
+        </p>
+      }
+      <div class="mt-4 flex justify-center gap-3">
+        <button class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="ResetAndStart">Restart</button>
+        <a class="rounded-lg bg-primary text-white px-4 py-2 font-semibold" href="/cornering-quiz">Review full quiz</a>
+        <a class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" href="/race-menu">Difficulty menu</a>
+      </div>
+    </div>
+  }
+}
+
+@code {
+  private bool submitted = false;
+  private Dictionary<int, int> answers = new();
+  [Parameter] public bool StepMode { get; set; } = false;
+  [Parameter] public bool ShowExplanation { get; set; } = true;
+  [Parameter] public bool RaceMode { get; set; } = false;
+  [Parameter] public bool Timed { get; set; } = false;
+  [Parameter] public int TimeLimitSeconds { get; set; } = 90;
+  private int current = 0;
+  private bool stepChecked = false;
+  private bool finished = false;
+  private bool started = false;
+  private int timeLeft;
+  private System.Timers.Timer? _timer;
+  private double userProgress = 0; // 0..1
+  private double[] foes = new double[2] { 0, 0 };
+  private double[] foeBase = new double[2] { 0.9, 0.8 }; // relative pace per question step
+  private readonly Random _rng = new Random();
+
+  private readonly List<Question> questions = new()
+  {
+    new(1, "What is the difference between understeer and oversteer?",
+      new() {
+        "A) Understeer happens when the rear tires lose grip first, oversteer when the front tires lose grip first",
+        "B) Understeer happens when the front tires lose grip first, oversteer when the rear tires lose grip first",
+        "C) Both understeer and oversteer mean all tires lose grip at the same time",
+        "D) Oversteer and understeer are the same phenomenon"
+      }, 1,
+      explanationHtml: "Understeer: front tires saturate first so the car runs wide. Oversteer: rear tires saturate first so the rear steps out."),
+
+    new(2, "Which force keeps a car moving in a circular path during cornering?",
+      new() { "A) Centrifugal force", "B) Centripetal force", "C) Inertia", "D) Gravitational force" }, 1,
+      explanationHtml: "Centripetal force acts toward the center of the turn to continuously change the car’s direction."),
+
+    new(3, "Why do Formula 1 cars rely heavily on aerodynamic downforce when cornering?",
+      new() { "A) To reduce fuel consumption", "B) To increase tire wear", "C) To increase grip and allow higher cornering speeds", "D) To decrease car weight" }, 2,
+      explanationHtml: "Downforce increases normal load on the tires, increasing available frictional (lateral) force without increasing mass."),
+
+    new(4, "A car of mass 800 kg takes a corner of radius 50 m at 20 m/s. What is the required centripetal force?",
+      new() { "A) 3,200 N", "B) 4,800 N", "C) 6,400 N", "D) 64,000 N" }, 2,
+      calculation: q => {
+        double m=800, v=20, r=50; var Fc = m * v * v / r; // 6400 N
+        return $"Centripetal force F = m v^2 / r = 800 · 20^2 / 50 = 800 · 400 / 50 = 320,000 / 50 = <strong>{Fc:N0} N</strong>.";
+      }),
+
+    new(5, "What limits the maximum speed at which a car can safely take a corner?",
+      new() { "A) Engine power", "B) Tire grip (friction coefficient)", "C) Car weight", "D) Aerodynamic drag" }, 1,
+      explanationHtml: "Maximum cornering is limited when required lateral force m v^2 / r reaches the tire friction limit μ N (grip)."),
+
+    new(6, "Why do racing cars use wider tires than normal road cars?",
+      new() { "A) To look more aggressive", "B) To reduce air resistance", "C) To increase the contact patch and improve grip", "D) To reduce suspension stiffness" }, 2,
+      explanationHtml: "Wider tires generally enable a larger, more stable contact patch and better heat management, improving usable grip."),
+
+    new(7, "What happens to weight distribution during cornering?",
+      new() { "A) More weight transfers to the inside tires", "B) More weight transfers to the outside tires", "C) Weight distribution stays the same", "D) Weight transfers to the rear tires" }, 1,
+      explanationHtml: "Lateral acceleration causes load transfer to the outside tires via the suspension and roll geometry."),
+
+    new(8, "If μ = 1.2, corner radius = 40 m, g = 9.81 m/s², what is the maximum safe cornering speed?",
+      new() { "A) 15.6 m/s", "B) 21.7 m/s", "C) 30.5 m/s", "D) 35.0 m/s" }, 1,
+      calculation: q => {
+        double mu=1.2, r=40, g=9.81; var v = Math.Sqrt(mu * g * r); // ~21.7
+        return $"Speed limit from μ g r = v² → v = √(μ g r) = √(1.2 · 9.81 · 40) = √(470.88) ≈ <strong>{v:F1} m/s</strong>.";
+      }),
+
+    new(9, "What role does the suspension system play in cornering dynamics?",
+      new() { "A) Increases top speed", "B) Maintains tire contact with the road for better grip", "C) Reduces aerodynamic drag", "D) Transfers engine power to the wheels" }, 1,
+      explanationHtml: "Suspension geometry and damping keep tires in good contact and manage load transfer for predictable grip."),
+
+    new(10, "Why do racing drivers take a “racing line” through corners?",
+      new() { "A) To make the corner longer, reducing sharpness", "B) To stay closer to the audience", "C) To save tire life", "D) To reduce the need for braking completely" }, 0,
+      explanationHtml: "A wider radius reduces required lateral acceleration (m v^2 / r), enabling higher corner speed and stability."),
+  };
+
+  private void Select(int id, int optionIndex)
+  {
+    answers[id] = optionIndex;
+  }
+
+  // Helpers for InputRadioGroup binding
+  private int? GetAnswer(int id)
+  {
+    return answers.TryGetValue(id, out var a) ? a : (int?)null;
+  }
+
+  private void SelectNullable(int id, int? value)
+  {
+    if (value.HasValue)
+    {
+      answers[id] = value.Value;
+    }
+    else
+    {
+      answers.Remove(id);
+    }
+  }
+
+  private int CorrectCount => questions.Count(q => answers.TryGetValue(q.Id, out var a) && a == q.CorrectIndex);
+  private int UnansweredCount => questions.Count(q => !answers.ContainsKey(q.Id));
+
+  private void OnSubmit()
+  {
+    submitted = true;
+  }
+
+  private void Reset()
+  {
+    submitted = false;
+    answers.Clear();
+  }
+
+  private void ResetAndStart()
+  {
+    Reset();
+    current = 0;
+    stepChecked = false;
+    finished = false;
+    userProgress = 0; foes[0] = foes[1] = 0; started = true;
+    if (Timed)
+    {
+      StartTimer();
+    }
+  }
+
+  private void CheckCurrent()
+  {
+    stepChecked = true;
+  }
+
+  private void Next()
+  {
+    if (current < questions.Count - 1)
+    {
+      // progress: only correct answers advance the player
+      if (answers.TryGetValue(questions[current].Id, out var a) && a == questions[current].CorrectIndex)
+      {
+        userProgress = Math.Min(1, userProgress + (1.0 / questions.Count));
+      }
+      // opponents advance a bit each step
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var jitter = 0.8 + _rng.NextDouble() * 0.4; // 0.8..1.2
+        foes[i] = Math.Min(1, foes[i] + foeBase[i] * (1.0 / questions.Count) * jitter);
+      }
+      current++;
+      stepChecked = false;
+    }
+    else
+    {
+      // last question: finalize progress once
+      if (answers.TryGetValue(questions[current].Id, out var a) && a == questions[current].CorrectIndex)
+      {
+        userProgress = Math.Min(1, userProgress + (1.0 / questions.Count));
+      }
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var jitter = 0.8 + _rng.NextDouble() * 0.4;
+        foes[i] = Math.Min(1, foes[i] + foeBase[i] * (1.0 / questions.Count) * jitter);
+      }
+      finished = true;
+      StopTimer();
+    }
+  }
+
+  private void StartTimer()
+  {
+    StopTimer();
+    timeLeft = TimeLimitSeconds;
+    _timer = new System.Timers.Timer(1000);
+    _timer.Elapsed += async (_, __) =>
+    {
+      if (finished) { StopTimer(); return; }
+      timeLeft = Math.Max(0, timeLeft - 1);
+      // advance opponents each tick
+      for (int i = 0; i < foes.Length; i++)
+      {
+        var tickInc = foeBase[i] * (1.0 / (questions.Count * Math.Max(10, TimeLimitSeconds))); // small per-second bumps
+        foes[i] = Math.Min(1, foes[i] + tickInc);
+      }
+      if (timeLeft == 0)
+      {
+        finished = true;
+        StopTimer();
+      }
+      await InvokeAsync(StateHasChanged);
+    };
+    _timer.AutoReset = true;
+    _timer.Enabled = true;
+  }
+
+  private void StopTimer()
+  {
+    if (_timer is not null)
+    {
+      try { _timer.Stop(); _timer.Dispose(); } catch { }
+      _timer = null;
+    }
+  }
+
+  protected override void OnAfterRender(bool firstRender)
+  {
+    if (firstRender && StepMode && !started)
+    {
+      ResetAndStart();
+    }
+    base.OnAfterRender(firstRender);
+  }
+
+  public void Dispose()
+  {
+    StopTimer();
+  }
+
+  private record Question(int Number, string Text, List<string> Options, int CorrectIndex, Func<Question, string>? calculation = null, string? explanationHtml = null)
+  {
+    public int Id => Number;
+    public string LetterFor(int idx) => ((char)('A' + idx)).ToString();
+    public string GetExplanationHtml()
+    {
+      if (calculation is not null)
+      {
+        return calculation(this);
+      }
+      return explanationHtml ?? string.Empty;
+    }
+  }
+}

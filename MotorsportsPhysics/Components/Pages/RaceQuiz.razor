@@ -1,0 +1,79 @@
+@page "/race-quiz"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.AspNetCore.Components.Web
+@using MotorsportsPhysics.Components.Pages
+
+<PageTitle>Race Quiz</PageTitle>
+
+@if (!_configured)
+{
+  <div class="container mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
+    <p class="text-gray-700">Loading…</p>
+  </div>
+}
+else
+{
+  <div class="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-4 text-sm text-gray-600">
+      <a class="text-primary hover:underline" href="/race-menu">Back to difficulty</a>
+      <span class="mx-2">/</span>
+      <span>Mode: <strong>@_label</strong></span>
+    </div>
+    <CorneringQuiz StepMode="true"
+                   ShowExplanation="@_showExplanation"
+                   RaceMode="@_raceMode"
+                   Timed="@_timed"
+                   TimeLimitSeconds="@_timeLimit" />
+  </div>
+}
+
+@code {
+  [Inject] public NavigationManager Nav { get; set; } = default!;
+
+  private bool _configured = false;
+  private bool _showExplanation = true;
+  private bool _raceMode = false;
+  private bool _timed = false;
+  private int _timeLimit = 90;
+  private string _label = "";
+
+  protected override void OnInitialized()
+  {
+    var uri = Nav.ToAbsoluteUri(Nav.Uri);
+    var query = QueryHelpers.ParseQuery(uri.Query);
+    var difficulty = query.TryGetValue("difficulty", out var v) ? v.ToString() : "easy";
+    switch (difficulty.ToLowerInvariant())
+    {
+      case "easy":
+        _showExplanation = true;
+        _raceMode = false;
+        _timed = false;
+        _timeLimit = 0;
+        _label = "Easy";
+        break;
+      case "medium":
+        _showExplanation = true;
+        _raceMode = true;
+        _timed = false;
+        _timeLimit = 0;
+        _label = "Medium";
+        break;
+      case "high":
+        _showExplanation = false;
+        _raceMode = true;
+        _timed = true;
+        _timeLimit = 120;
+        _label = "High";
+        break;
+      default:
+        _showExplanation = true;
+        _raceMode = false;
+        _timed = false;
+        _timeLimit = 0;
+        _label = "Easy";
+        break;
+    }
+    _configured = true;
+  }
+}
