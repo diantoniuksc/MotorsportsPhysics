@@ -6,7 +6,16 @@
   <div class="absolute inset-0">
     <svg @ref="svg" viewBox="0 0 800 450" class="w-full h-full">
       <image href="images/track.png" x="0" y="0" width="800" height="450" preserveAspectRatio="none"/>
-      <path id="racePath" d="@PathD" fill="none" stroke="#00bcd4" stroke-width="0" />
+  <path id="racePath"
+    d="@(string.IsNullOrWhiteSpace(PathDOverride) ? PathD : PathDOverride)"
+    fill="none"
+    stroke="@PathColor"
+    stroke-width="@((ShowPath ? PathWidth : 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
+    stroke-opacity="@((ShowPath ? PathOpacity : 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
+    stroke-dasharray="@(ShowPath && !string.IsNullOrEmpty(PathDashArray) ? PathDashArray : null)"
+    transform="@(((PathScaleX != 1.0 || PathScaleY != 1.0) && PathScale == 1.0 && PathTranslateX == 0 && PathTranslateY == 0)
+      ? $"scale({PathScaleX.ToString(System.Globalization.CultureInfo.InvariantCulture)} {PathScaleY.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+      : null)" />
       @if (Cars?.Any() == true)
       {
         var idx = 0;
@@ -44,6 +53,16 @@
   [Parameter] public int Speed { get; set; } = 140;
   [Parameter] public double StartRotation { get; set; } = 50;
   [Parameter] public double AngleSmoothing { get; set; } = 0.18;
+  // Optional: override the default path and apply scaling to map external coordinate systems into 800x450
+  [Parameter] public string? PathDOverride { get; set; }
+  [Parameter] public double PathScaleX { get; set; } = 1.0;
+  [Parameter] public double PathScaleY { get; set; } = 1.0;
+  // Path visibility & styling (visible by default for debugging)
+  [Parameter] public bool ShowPath { get; set; } = true;
+  [Parameter] public double PathWidth { get; set; } = 2.0;
+  [Parameter] public double PathOpacity { get; set; } = 0.7;
+  [Parameter] public string PathColor { get; set; } = "#00bcd4";
+  [Parameter] public string? PathDashArray { get; set; } = "6 10";
 
   private ElementReference svg;
   private IJSObjectReference? _module;
@@ -54,11 +73,23 @@
     if (!firstRender) return;
     _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=2");
     _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing });
-    await _anim.InvokeVoidAsync("play");
+    // Apply optional transform so the path and cars align
+    if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
+    {
+      await _anim.InvokeVoidAsync("setTransform", PathTranslateX, PathTranslateY, PathScale);
+    }
+    if (_anim is not null)
+    {
+      await _anim.InvokeVoidAsync("play");
+    }
   }
 
   public record CarSprite(string Src, double Width = 70, double Height = 40, double Offset = 0);
 
   private string PathD =
     "M455.112 404C333.824 407.368 265.469 406.69 142.612 404C115.491 398.004 101.551 397.363 69.6119 381C62.688 378.119 54.6375 371.913 33.6119 353.5C7.24282 331.35 -0.023026 321.235 1.11189 307.5C2.21865 289.658 11.0689 282.31 54.1119 278C79.1942 278.992 93.3286 280.719 118.612 285L209.112 311.5C229.419 314.692 240.805 314.274 261.112 311.5C273.841 310.165 280.658 306.393 292.112 293C295.614 277.182 297.085 267.516 298.612 248.5C300.122 235.579 299.325 228.557 287.112 217.5C270.084 204.075 255.34 196.285 224.612 181.5L183.112 146.5C166.185 125.936 162.553 114.069 163.112 92.5C164.252 69.8158 167.742 57.6963 183.112 38C182.363 35.6948 212.43 15.1863 241.612 9.5C259.823 4.30919 272.176 2.04574 304.112 1C330.611 2.41292 344.747 3.75889 365.612 9.5C386.183 13.6806 395.456 18.9656 404.612 38C415.557 62.7294 420.546 77.4774 424.612 107.5L431.112 181.5C434.835 197.277 438.484 205.648 455.112 217.5C468.251 224.432 476.236 227.188 491.612 230L566.612 236C582.647 238.514 591.335 240.812 605.612 248.5C614.771 258.635 619.564 264.223 625.612 273.5C630.794 285.534 633.266 292.501 632.612 307.5C627.609 328.421 623.676 339.866 611.612 359C601.945 370.303 594.969 374.91 580.612 381C534.536 394.026 506.872 398.807 455.112 404Z";
+  // Uniform scale and translation applied via JS so cars follow the transformed path visually
+  [Parameter] public double PathScale { get; set; } = 1.0;
+  [Parameter] public double PathTranslateX { get; set; } = 0.0;
+  [Parameter] public double PathTranslateY { get; set; } = 0.0;
 }
