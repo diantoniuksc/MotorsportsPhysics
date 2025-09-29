@@ -2,14 +2,21 @@
 // Exports init(svgEl, { speed }) which returns an object with play/pause/setSpeed/reset/dispose
 
 /**
- * @param {SVGSVGElement} svgEl - The SVG root containing #racePath and #carSprite
- * @param {{speed?: number}} opts
+ * @param {SVGSVGElement} svgEl - The SVG root containing #racePath and car sprites (.carSprite or #carSprite)
+ * @param {{speed?: number, startRotation?: number, angleSmoothing?: number}} opts
  */
 export function init(svgEl, opts = {}) {
   const speed = opts.speed ?? 140; // px / s along path length
   const path = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath'));
-  const car = /** @type {SVGImageElement} */ (svgEl.querySelector('#carSprite'));
-  if (!path || !car) throw new Error('Missing #racePath or #carSprite in SVG');
+  if (!path) throw new Error('Missing #racePath in SVG');
+  // Gather cars: prefer any elements with class .carSprite; fallback to legacy #carSprite if present
+  const carNodeList = /** @type {NodeListOf<SVGImageElement>} */ (svgEl.querySelectorAll('.carSprite'));
+  const cars = Array.from(carNodeList);
+  if (cars.length === 0) {
+    const legacy = /** @type {SVGImageElement|null} */ (svgEl.querySelector('#carSprite'));
+    if (legacy) cars.push(legacy);
+  }
+  if (cars.length === 0) throw new Error('No car sprites found (.carSprite or #carSprite)');
 
   let playing = false;
   let pxPerSec = speed;
@@ -25,9 +32,11 @@ export function init(svgEl, opts = {}) {
   let angleAlpha = Number.isFinite(Number(opts.angleSmoothing)) ? Number(opts.angleSmoothing) : 0.18;
   let prevAngleDeg = undefined; // previous smoothed angle in degrees
 
-  // Read width/height later during render so runtime attribute changes are respected
-  let carW = Number(car.getAttribute('width') || 48);
-  let carH = Number(car.getAttribute('height') || 28);
+  // Per-car previous angle smoothing and size cache
+  /** @type {Map<SVGImageElement, number>} */
+  const prevAngleDegMap = new Map();
+  /** @type {Map<SVGImageElement, {w:number,h:number}>>} */
+  const sizeMap = new Map();
 
   const total = path.getTotalLength();
 
@@ -44,36 +53,42 @@ export function init(svgEl, opts = {}) {
     rafId = requestAnimationFrame(step);
   }
 
-  function render(len) {
-    // Refresh car size in case attributes changed
-    carW = Number(car.getAttribute('width') || carW || 48);
-    carH = Number(car.getAttribute('height') || carH || 28);
-    // position in path local coordinates
-    const p = path.getPointAtLength(len);
-    // compute tangent for rotation using a small delta
-  const delta = 0.1; // smaller delta yields a smoother tangent estimate
-  // when moving backwards use a point behind the current length so the car faces the direction of motion
-  const p2 = path.getPointAtLength((len - delta + total) % total);
-
-    // Apply the same transform (translate + scale) to map from path coordinates to SVG coords
-    const mappedX = p.x * s + tx;
-    const mappedY = p.y * s + ty;
-    const mappedPx2X = p2.x * s + tx;
-    const mappedPx2Y = p2.y * s + ty;
-  const targetAngleDeg = Math.atan2(mappedPx2Y - mappedY, mappedPx2X - mappedX) * 180 / Math.PI;
-  // Smooth heading change using shortest-arc interpolation
-  if (prevAngleDeg === undefined) prevAngleDeg = targetAngleDeg;
-  const diff = ((((targetAngleDeg - prevAngleDeg) + 540) % 360) - 180); // [-180,180)
-  const smoothedAngleDeg = prevAngleDeg + diff * angleAlpha;
-  prevAngleDeg = smoothedAngleDeg;
-  const finalAngle = smoothedAngleDeg + rotationOffset;
-
-    // Center the car on the mapped point and rotate around its mapped center
-    const x = mappedX - carW / 2;
-    const y = mappedY - carH / 2;
-    car.setAttribute('x', x.toFixed(2));
-    car.setAttribute('y', y.toFixed(2));
-    car.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${mappedX.toFixed(2)} ${mappedY.toFixed(2)})`);
+  function render(lenBase) {
+    const delta = 0.1;
+    cars.forEach((carEl) => {
+      // offset per car through data-offset in [0..1) fraction of total length
+      const offsetFrac = Number(carEl.getAttribute('data-offset') || 0);
+      const len = ((lenBase - offsetFrac * total) % total + total) % total;
+      // size
+      let sz = sizeMap.get(carEl);
+      if (!sz) {
+        sz = {
+          w: Number(carEl.getAttribute('width') || 48),
+          h: Number(carEl.getAttribute('height') || 28)
+        };
+        sizeMap.set(carEl, sz);
+      }
+      // position and tangent
+      const p = path.getPointAtLength(len);
+      const p2 = path.getPointAtLength((len - delta + total) % total);
+      const mappedX = p.x * s + tx;
+      const mappedY = p.y * s + ty;
+      const mappedPx2X = p2.x * s + tx;
+      const mappedPx2Y = p2.y * s + ty;
+      const targetAngleDeg = Math.atan2(mappedPx2Y - mappedY, mappedPx2X - mappedX) * 180 / Math.PI;
+      let prev = prevAngleDegMap.get(carEl);
+      if (prev === undefined) prev = targetAngleDeg;
+      const diff = ((((targetAngleDeg - prev) + 540) % 360) - 180);
+      const smoothedAngleDeg = prev + diff * angleAlpha;
+      prevAngleDegMap.set(carEl, smoothedAngleDeg);
+      const finalAngle = smoothedAngleDeg + rotationOffset;
+      // center and rotate
+      const x = mappedX - sz.w / 2;
+      const y = mappedY - sz.h / 2;
+      carEl.setAttribute('x', x.toFixed(2));
+      carEl.setAttribute('y', y.toFixed(2));
+      carEl.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${mappedX.toFixed(2)} ${mappedY.toFixed(2)})`);
+    });
   }
 
   function play() {

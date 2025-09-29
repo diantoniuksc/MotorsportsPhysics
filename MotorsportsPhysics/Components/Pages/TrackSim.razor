@@ -37,7 +37,7 @@
             </div>
         </div>
     <button class="btn" style="margin-left:1rem" @onclick="Reset">Reset</button>
-    <p class="muted">Drop your own images in <code>wwwroot/images/track.png</code> and <code>wwwroot/images/car.png</code> then tweak the path below.</p>
+    <p class="muted">Drop your own images in <code>wwwroot/images/track.png</code> and <code>wwwroot/images/car-yellow.png</code> then tweak the path below.</p>
     <p class="muted">Tip: Draw the centerline in any vector tool and copy its SVG path "d" here.</p>
     
 </div>
@@ -55,7 +55,7 @@
           transform="translate(@translateX @translateY) scale(@scale)"/>
 
     <!-- The car sprite that will be moved/rotated by JS -->
-    <image id="carSprite" href="images/car.png" width="100" height="100" x="520" y="480" preserveAspectRatio="xMidYMid meet" />
+    <image id="carSprite" href="images/car-yellow.png" width="100" height="100" x="520" y="480" preserveAspectRatio="xMidYMid meet" />
 </svg>
 
 @code {
