@@ -3,6 +3,8 @@
 @using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.AspNetCore.Components.Web
 @using MotorsportsPhysics.Components.Pages
+@using MotorsportsPhysics.Components.Shared
+@inject IJSRuntime JS
 
 <PageTitle>Race Quiz</PageTitle>
 
@@ -20,6 +22,17 @@ else
       <span class="mx-2">/</span>
       <span>Mode: <strong>@_label</strong></span>
     </div>
+      @if (_showAnim)
+      {
+        @if (_isEasy)
+        {
+          <EasyRace />
+        }
+        else
+        {
+          <MediumRace />
+        }
+      }
     <CorneringQuiz StepMode="true"
                    ShowExplanation="@_showExplanation"
                    RaceMode="@_raceMode"
@@ -37,6 +50,9 @@ else
   private bool _timed = false;
   private int _timeLimit = 90;
   private string _label = "";
+  private bool _isEasy = false;
+    private bool _showAnim = false;
+
 
   protected override void OnInitialized()
   {
@@ -51,6 +67,8 @@ else
         _timed = false;
         _timeLimit = 0;
         _label = "Easy";
+        _isEasy = true;
+        _showAnim = true;
         break;
       case "medium":
         _showExplanation = true;
@@ -58,6 +76,8 @@ else
         _timed = false;
         _timeLimit = 0;
         _label = "Medium";
+        _isEasy = false;
+          _showAnim = true;
         break;
       case "high":
         _showExplanation = false;
@@ -65,6 +85,8 @@ else
         _timed = true;
         _timeLimit = 120;
         _label = "High";
+        _isEasy = false;
+          _showAnim = true;
         break;
       default:
         _showExplanation = true;
@@ -72,8 +94,12 @@ else
         _timed = false;
         _timeLimit = 0;
         _label = "Easy";
+        _isEasy = true;
+        _showAnim = true;
         break;
     }
     _configured = true;
   }
+
+  // RaceTrack handles its own JS init
 }

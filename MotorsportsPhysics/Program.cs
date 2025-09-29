@@ -21,6 +21,13 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
+// Ensure legacy /favicon.ico requests receive the updated PNG
+app.MapGet("/favicon.ico", context =>
+{
+    context.Response.Redirect("/favicon.png?v=3", permanent: false);
+    return Task.CompletedTask;
+});
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
