@@ -17,9 +17,14 @@
 else
 {
   <div class="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-4 text-sm text-gray-600">
+      <a class="text-primary hover:underline" href="/race-menu">Back to difficulty</a>
+      <span class="mx-2">/</span>
+      <span>Mode: <strong>@_label</strong></span>
+    </div>
       @if (_showAnim)
       {
-        if (_isEasy)
+        @if (_isEasy)
         {
           <EasyRace />
         }
@@ -28,11 +33,6 @@ else
           <MediumRace />
         }
       }
-    <div class="mb-4 text-sm text-gray-600">
-      <a class="text-primary hover:underline" href="/race-menu">Back to difficulty</a>
-      <span class="mx-2">/</span>
-      <span>Mode: <strong>@_label</strong></span>
-    </div>
     <CorneringQuiz StepMode="true"
                    ShowExplanation="@_showExplanation"
                    RaceMode="@_raceMode"
@@ -68,6 +68,7 @@ else
         _timeLimit = 0;
         _label = "Easy";
         _isEasy = true;
+        _showAnim = true;
         break;
       case "medium":
         _showExplanation = true;
@@ -94,6 +95,7 @@ else
         _timeLimit = 0;
         _label = "Easy";
         _isEasy = true;
+        _showAnim = true;
         break;
     }
     _configured = true;
