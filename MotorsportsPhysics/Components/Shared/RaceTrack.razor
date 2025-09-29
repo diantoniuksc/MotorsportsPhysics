@@ -1,5 +1,7 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
+@using System.Threading
+@implements IAsyncDisposable
 @inject IJSRuntime JS
 
 <div class="relative w-full max-w-5xl mx-auto rounded-lg overflow-hidden shadow-lg @Class" style="aspect-ratio: 16 / 9;">
@@ -50,12 +52,18 @@
   [Parameter] public string Class { get; set; } = string.Empty;
   [Parameter] public string Title { get; set; } = "";
   [Parameter] public IEnumerable<CarSprite>? Cars { get; set; }
-  [Parameter] public int Speed { get; set; } = 140;
-  [Parameter] public double StartRotation { get; set; } = 50;
+  [Parameter] public int Speed { get; set; } = 180;
+  [Parameter] public double StartRotation { get; set; } = 270;
   [Parameter] public double AngleSmoothing { get; set; } = 0.18;
+  // Shift initial position along the path by a fraction of total length (-1..1). Positive moves forward; negative moves earlier/back.
+  [Parameter] public double StartOffsetFraction { get; set; } = 0.094;
+  // Start/acceleration behavior
+  // Stationary on load, wait this many seconds, then accelerate to Speed over AccelerationSeconds
+  [Parameter] public double StartDelaySeconds { get; set; } = 1.2;
+  [Parameter] public double AccelerationSeconds { get; set; } = 2.5;
   // Optional: override the default path and apply scaling to map external coordinate systems into 800x450
   [Parameter] public string? PathDOverride { get; set; }
-  [Parameter] public double PathScaleX { get; set; } = 1.0;
+  [Parameter] public double PathScaleX { get; set; } = 10.0;
   [Parameter] public double PathScaleY { get; set; } = 1.0;
   // Path visibility & styling (visible by default for debugging)
   [Parameter] public bool ShowPath { get; set; } = true;
@@ -67,12 +75,13 @@
   private ElementReference svg;
   private IJSObjectReference? _module;
   private IJSObjectReference? _anim;
+  private CancellationTokenSource? _cts;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-    _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=2");
-    _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing });
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=4");
+  _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
     {
@@ -80,16 +89,95 @@
     }
     if (_anim is not null)
     {
+      // Start playing at speed 0 so the car remains stationary
+      await _anim.InvokeVoidAsync("setSpeed", 0);
       await _anim.InvokeVoidAsync("play");
+      _cts = new CancellationTokenSource();
+      _ = StartWithRampAsync(_cts.Token);
+    }
+  }
+
+  private async Task StartWithRampAsync(CancellationToken ct)
+  {
+    try
+    {
+      // Optional initial delay
+      var delayMs = (int)Math.Max(0, StartDelaySeconds * 1000);
+      if (delayMs > 0)
+      {
+        await Task.Delay(delayMs, ct);
+      }
+
+      // If no ramp duration, jump to target speed
+      if (AccelerationSeconds <= 0)
+      {
+        if (_anim is not null)
+        {
+          await _anim.InvokeVoidAsync("setSpeed", Speed);
+        }
+        return;
+      }
+
+      // Smooth acceleration to target using ease-in cubic (t^3)
+      var duration = TimeSpan.FromSeconds(AccelerationSeconds);
+      // 30 steps per second is smooth enough while minimizing interop
+      var steps = Math.Max(1, (int)Math.Round(AccelerationSeconds * 30));
+      var stepDelay = TimeSpan.FromSeconds(AccelerationSeconds / steps);
+      for (int i = 1; i <= steps; i++)
+      {
+        ct.ThrowIfCancellationRequested();
+        double t = (double)i / steps; // 0..1
+        double eased = t * t * t; // ease-in cubic
+        double current = Speed * eased;
+        if (_anim is not null)
+        {
+          await _anim.InvokeVoidAsync("setSpeed", current);
+        }
+        if (i < steps)
+        {
+          await Task.Delay(stepDelay, ct);
+        }
+      }
+      // Ensure we end exactly at target
+      if (_anim is not null)
+      {
+        await _anim.InvokeVoidAsync("setSpeed", Speed);
+      }
+    }
+    catch (OperationCanceledException)
+    {
+      // ignored
+    }
+  }
+
+  public async ValueTask DisposeAsync()
+  {
+    try
+    {
+      _cts?.Cancel();
+    }
+    catch { }
+    finally
+    {
+      _cts?.Dispose();
+      _cts = null;
+    }
+    if (_anim is not null)
+    {
+      try { await _anim.InvokeVoidAsync("dispose"); } catch { }
+    }
+    if (_module is not null)
+    {
+      try { await _module.DisposeAsync(); } catch { }
     }
   }
 
   public record CarSprite(string Src, double Width = 70, double Height = 40, double Offset = 0);
 
   private string PathD =
-    "M455.112 404C333.824 407.368 265.469 406.69 142.612 404C115.491 398.004 101.551 397.363 69.6119 381C62.688 378.119 54.6375 371.913 33.6119 353.5C7.24282 331.35 -0.023026 321.235 1.11189 307.5C2.21865 289.658 11.0689 282.31 54.1119 278C79.1942 278.992 93.3286 280.719 118.612 285L209.112 311.5C229.419 314.692 240.805 314.274 261.112 311.5C273.841 310.165 280.658 306.393 292.112 293C295.614 277.182 297.085 267.516 298.612 248.5C300.122 235.579 299.325 228.557 287.112 217.5C270.084 204.075 255.34 196.285 224.612 181.5L183.112 146.5C166.185 125.936 162.553 114.069 163.112 92.5C164.252 69.8158 167.742 57.6963 183.112 38C182.363 35.6948 212.43 15.1863 241.612 9.5C259.823 4.30919 272.176 2.04574 304.112 1C330.611 2.41292 344.747 3.75889 365.612 9.5C386.183 13.6806 395.456 18.9656 404.612 38C415.557 62.7294 420.546 77.4774 424.612 107.5L431.112 181.5C434.835 197.277 438.484 205.648 455.112 217.5C468.251 224.432 476.236 227.188 491.612 230L566.612 236C582.647 238.514 591.335 240.812 605.612 248.5C614.771 258.635 619.564 264.223 625.612 273.5C630.794 285.534 633.266 292.501 632.612 307.5C627.609 328.421 623.676 339.866 611.612 359C601.945 370.303 594.969 374.91 580.612 381C534.536 394.026 506.872 398.807 455.112 404Z";
+    "M612.508 423.151C438.898 431.914 342.384 437.99 157.525 430.869L105.314 425.08C75.8902 420.87 59.5932 415.586 30.7261 403.212L2.24728 372.338C-0.27815 353.794 0.792105 343.641 7.67182 326.028C12.3987 316.855 17.2131 311.847 35.4726 303.516C52.7043 299.586 62.4797 297.497 89.718 303.516C101.939 305.194 112.634 312.46 139.895 338.892C186.892 355.437 189.833 355.243 196.853 355.615C225.262 355.854 241.088 356.2 271.44 352.399C288.644 345.87 298.524 342.547 312.802 331.817C323.327 322.255 329.179 316.875 336.535 306.089C340.464 295.428 342.557 289.419 345.35 278.432C348.644 263.111 348.231 253.314 345.35 234.694C336.411 223.188 329.636 217.788 316.193 208.966C301.988 200.751 291.955 196.688 270.762 190.314C238.172 177.054 220.704 168.949 192.106 152.365C181.637 146.763 176.722 142.797 171.764 132.426V111.201V75.8249C175.638 56.9734 179.604 47.1064 198.209 34.0172C229.62 14.5551 250.567 9.50283 289.07 2.50056C322.807 -0.953666 340.821 2.07071 373.15 6.35973C386.721 10.1824 394.257 12.7043 407.054 20.51C417.914 27.5802 425.656 33.3101 438.245 48.8107C446.837 60.4237 448.531 66.6711 451.806 79.6841C452.001 123.435 453.647 147.742 461.977 190.314C467.046 203.524 471.306 210.829 480.285 223.76C492.701 243.258 502.201 247.655 506.73 248.201C556.392 258.079 583.992 263.118 632.851 271.356C652.515 279.189 676.673 291.56 685.062 296.441C693.451 301.322 696.107 303.287 699.979 312.521C700.986 324.059 701.654 330.603 699.979 340.178C696.576 355.747 693.369 364.21 685.062 378.77C677.865 392.185 672.803 399.039 659.295 408.357C642.011 417.222 631.877 420.803 612.508 423.151Z";
   // Uniform scale and translation applied via JS so cars follow the transformed path visually
-  [Parameter] public double PathScale { get; set; } = 1.0;
-  [Parameter] public double PathTranslateX { get; set; } = 0.0;
-  [Parameter] public double PathTranslateY { get; set; } = 0.0;
+  [Parameter] public double PathScale { get; set; } = 0.77;
+  [Parameter] public double PathTranslateX { get; set; } = 130.0;
+  [Parameter] public double PathTranslateY { get; set; } = 39.0;
 }

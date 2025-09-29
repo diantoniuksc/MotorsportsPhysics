@@ -39,6 +39,14 @@ export function init(svgEl, opts = {}) {
   const sizeMap = new Map();
 
   const total = path.getTotalLength();
+  // optional starting offset fraction along the path (-1..1). Positive goes forward; negative earlier/back.
+  let startOffsetFrac = Number(opts.startOffsetFrac);
+  if (!Number.isFinite(startOffsetFrac)) startOffsetFrac = 0;
+  // Our animation runs anticlockwise (we decrease traveled), so to move the apparent start earlier (back), we increase traveled.
+  if (startOffsetFrac !== 0) {
+    traveled = (traveled + startOffsetFrac * total) % total;
+    if (traveled < 0) traveled += total;
+  }
 
   function step(ts) {
     if (!playing) return;
@@ -104,12 +112,17 @@ export function init(svgEl, opts = {}) {
   function reset() {
     pause();
     traveled = 0;
+    if (startOffsetFrac !== 0) {
+      traveled = (traveled + startOffsetFrac * total) % total;
+      if (traveled < 0) traveled += total;
+    }
     render(traveled);
   }
   function setSpeed(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return;
-    pxPerSec = Math.max(1, n);
+    // Allow 0 to keep the car stationary; negative values treated as 0
+    pxPerSec = Math.max(0, n);
   }
   function setTransform(txNew, tyNew, sNew) {
     tx = Number(txNew) || 0;
@@ -129,8 +142,8 @@ export function init(svgEl, opts = {}) {
     pause();
   }
 
-  // Initial render to place the car at the path start
-  render(0);
+  // Initial render to place the car at the path start (with optional offset)
+  render(traveled);
 
   return { play, pause, setSpeed, reset, dispose, setTransform, setRotation };
 }
