@@ -71,6 +71,10 @@
   [Parameter] public double PathOpacity { get; set; } = 0.7;
   [Parameter] public string PathColor { get; set; } = "#00bcd4";
   [Parameter] public string? PathDashArray { get; set; } = "6 10";
+  // Whether the current quiz question has been answered (controls if animation halts on lap events)
+  [Parameter] public bool QuestionAnswered { get; set; } = false;
+  // Number of questions answered so far; used to gate lap passing
+  [Parameter] public int AnsweredCount { get; set; } = 0;
 
   private ElementReference svg;
   private IJSObjectReference? _module;
@@ -80,7 +84,7 @@
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=4");
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=9");
   _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
@@ -90,14 +94,17 @@
     if (_anim is not null)
     {
       // Start playing at speed 0 so the car remains stationary
-      await _anim.InvokeVoidAsync("setSpeed", 0);
+  await _anim.InvokeVoidAsync("setSpeed", 0);
       await _anim.InvokeVoidAsync("play");
-      _cts = new CancellationTokenSource();
-      _ = StartWithRampAsync(_cts.Token);
+  // Sync initial answered state
+  await _anim.InvokeVoidAsync("setQuestionAnswered", QuestionAnswered);
+  await _anim.InvokeVoidAsync("setAnsweredCount", AnsweredCount);
+  _cts = new CancellationTokenSource();
+  _ = StartWithRampAsync(_cts.Token);
     }
   }
 
-  private async Task StartWithRampAsync(CancellationToken ct)
+  private async Task StartWithRampAsync(CancellationToken ct, double? targetSpeedOverride = null)
   {
     try
     {
@@ -113,7 +120,8 @@
       {
         if (_anim is not null)
         {
-          await _anim.InvokeVoidAsync("setSpeed", Speed);
+          var finalSpeed = targetSpeedOverride ?? Speed;
+          await _anim.InvokeVoidAsync("setSpeed", finalSpeed);
         }
         return;
       }
@@ -123,12 +131,13 @@
       // 30 steps per second is smooth enough while minimizing interop
       var steps = Math.Max(1, (int)Math.Round(AccelerationSeconds * 30));
       var stepDelay = TimeSpan.FromSeconds(AccelerationSeconds / steps);
+      var target = targetSpeedOverride ?? Speed;
       for (int i = 1; i <= steps; i++)
       {
         ct.ThrowIfCancellationRequested();
         double t = (double)i / steps; // 0..1
         double eased = t * t * t; // ease-in cubic
-        double current = Speed * eased;
+        double current = target * eased;
         if (_anim is not null)
         {
           await _anim.InvokeVoidAsync("setSpeed", current);
@@ -141,7 +150,7 @@
       // Ensure we end exactly at target
       if (_anim is not null)
       {
-        await _anim.InvokeVoidAsync("setSpeed", Speed);
+        await _anim.InvokeVoidAsync("setSpeed", target);
       }
     }
     catch (OperationCanceledException)
@@ -180,4 +189,32 @@
   [Parameter] public double PathScale { get; set; } = 0.77;
   [Parameter] public double PathTranslateX { get; set; } = 130.0;
   [Parameter] public double PathTranslateY { get; set; } = 39.0;
+
+  // Public control methods for parent components
+  public async Task PlayLapsAsync(int laps, int? speed = null, bool haltOnFinish = true)
+  {
+    if (_anim is null) return;
+    var s = speed ?? this.Speed;
+    await _anim.InvokeVoidAsync("setSpeed", 0);
+    // Wait for start delay and ramp if configured
+    if (StartDelaySeconds > 0 || AccelerationSeconds > 0)
+    {
+      // If a ramp is in progress, cancel and restart
+      _cts?.Cancel();
+      _cts = new CancellationTokenSource();
+      // Kick off ramp separately to the per-step target speed
+      _ = StartWithRampAsync(_cts.Token, s);
+    }
+    // playForLaps will ensure playing and only count distance; target speed will be applied by the ramp
+    await _anim.InvokeVoidAsync("playForLaps", laps, s, haltOnFinish);
+  }
+
+  protected override async Task OnParametersSetAsync()
+  {
+    if (_anim is not null)
+    {
+      try { await _anim.InvokeVoidAsync("setQuestionAnswered", QuestionAnswered); } catch { }
+      try { await _anim.InvokeVoidAsync("setAnsweredCount", AnsweredCount); } catch { }
+    }
+  }
 }

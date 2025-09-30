@@ -1,4 +1,21 @@
 @using MotorsportsPhysics.Components.Shared
 
-<RaceTrack Class="mb-8" Title="Cornering Dynamics"
-  Cars="@(new RaceTrack.CarSprite[] { new RaceTrack.CarSprite("images/car-yellow.png", 70, 40, 0.0) })" />
+<RaceTrack @ref="track" Class="mb-8" Title="Cornering Dynamics"
+  QuestionAnswered="@QuestionAnswered" AnsweredCount="@AnsweredCount"
+  Cars="@(new MotorsportsPhysics.Components.Shared.RaceTrack.CarSprite[] { new MotorsportsPhysics.Components.Shared.RaceTrack.CarSprite("images/car-yellow.png", 70, 40, 0.0) })" />
+
+@code {
+  private MotorsportsPhysics.Components.Shared.RaceTrack? track;
+  [Parameter] public bool QuestionAnswered { get; set; } = false;
+  [Parameter] public int AnsweredCount { get; set; } = 0;
+
+  public async Task StartStepAsync(int step)
+  {
+    if (track is null) { await Task.CompletedTask; return; }
+    var laps = Math.Max(1, step); // n laps on step n
+    var speed = 100 + step * 20;  // speed = 100 + n*20
+    Console.WriteLine($"EasyRace: Starting step {step} with {laps} laps at speed {speed}");
+    // For the hard-stop test, request exactly 1 lap; JS will halt after first wrap.
+    await track.PlayLapsAsync(1, speed, haltOnFinish: false);
+  }
+}

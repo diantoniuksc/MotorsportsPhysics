@@ -26,18 +26,21 @@ else
       {
         @if (_isEasy)
         {
-          <EasyRace />
+          <EasyRace @ref="_easyRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" />
         }
         else
         {
-          <MediumRace />
+          <MediumRace QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" />
         }
       }
     <CorneringQuiz StepMode="true"
                    ShowExplanation="@_showExplanation"
                    RaceMode="@_raceMode"
                    Timed="@_timed"
-                   TimeLimitSeconds="@_timeLimit" />
+                   TimeLimitSeconds="@_timeLimit"
+                   OnStepStarted="OnStepStarted"
+                   OnAnswerStateChanged="OnAnswerStateChanged"
+                   OnAnsweredCountChanged="OnAnsweredCountChanged" />
   </div>
 }
 
@@ -52,6 +55,9 @@ else
   private string _label = "";
   private bool _isEasy = false;
     private bool _showAnim = false;
+  private EasyRace? _easyRace;
+  private bool _questionAnswered = false;
+  private int _answeredCount = 0;
 
 
   protected override void OnInitialized()
@@ -102,4 +108,25 @@ else
   }
 
   // RaceTrack handles its own JS init
+  private async Task OnStepStarted(int step)
+  {
+    if (_isEasy && _easyRace is not null)
+    {
+      await _easyRace.StartStepAsync(step);
+    }
+  }
+
+  private Task OnAnswerStateChanged(bool answered)
+  {
+    _questionAnswered = answered;
+    StateHasChanged();
+    return Task.CompletedTask;
+  }
+
+  private Task OnAnsweredCountChanged(int count)
+  {
+    _answeredCount = count;
+    StateHasChanged();
+    return Task.CompletedTask;
+  }
 }

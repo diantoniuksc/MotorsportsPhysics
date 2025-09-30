@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build MotorsportsPhysics",
+			"type": "shell",
+			"command": "dotnet build .\\MotorsportsPhysics\\MotorsportsPhysics.sln",
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		}
+	]
+}
