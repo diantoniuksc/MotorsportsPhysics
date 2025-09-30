@@ -110,7 +110,7 @@
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=12");
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=13");
   _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction, showStartMarker = this.ShowStartMarker });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))

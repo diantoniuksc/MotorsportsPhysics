@@ -176,15 +176,15 @@ else
 
   private async Task OnAnswerChecked(bool correct)
   {
-    // Case 1 (correct): increase base speed a bit
+    // Case 1 (correct): increase base speed immediately
     if (_isEasy && _easyRace is not null && correct)
     {
-      await _easyRace.AdjustBaseSpeedAsync(+15); // tune as desired
+      await _easyRace.AdjustBaseSpeedAsync(+35); // increased boost per request
     }
-    // Case 2 (wrong): decrease speed for the remainder of the current lap
+    // Case 2 (wrong): decrease base speed immediately
     else if (_isEasy && _easyRace is not null && !correct)
     {
-      await _easyRace.ApplyPenaltyForNextLapAsync(multiplier: 0.85); // 15% slow for rest of lap
+      await _easyRace.AdjustBaseSpeedAsync(-15); // tune as desired
     }
   }
 

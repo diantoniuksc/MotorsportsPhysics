@@ -13,11 +13,9 @@
   public async Task StartStepAsync(int step)//ilove cats and my sister, give me million dollars pls
   {
     if (track is null) { await Task.CompletedTask; return; }
-    var laps = Math.Max(1, step); // n laps on step n
-    var speed = 100 + step * 20;  // speed = 100 + n*20
-    Console.WriteLine($"EasyRace: Starting step {step} with {laps} laps at speed {speed}");
-    // For the hard-stop test, request exactly 1 lap; JS will halt after first wrap.
-    await track.PlayLapsAsync(1, speed, haltOnFinish: false);
+    var laps = Math.Max(1, step); // n laps on step n (visual progression only)
+    // Keep current speed; only correct/incorrect answers should change it
+    await track.PlayLapsAsync(1, speed: null, haltOnFinish: false);
   }
 
   public async Task ApplyPenaltyAsync(double multiplier, int durationMs)
