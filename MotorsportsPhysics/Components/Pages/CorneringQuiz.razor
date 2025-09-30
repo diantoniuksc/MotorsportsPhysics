@@ -177,6 +177,14 @@ else
   {
     <div class="max-w-3xl mx-auto rounded-lg border border-primary/30 bg-primary/10 px-4 py-6 text-center">
       <p class="text-xl font-semibold">Score: @CorrectCount / @questions.Count</p>
+      @if (_elapsed.HasValue && _showElapsed)
+      {
+        <p class="mt-2 text-gray-800">Time to complete: <strong>@_elapsed.Value.ToString(@"m\:ss")</strong></p>
+      }
+      else if (finished && !_showElapsed)
+      {
+        <p class="mt-2 text-gray-600 text-sm">Waiting for car to complete the final lap…</p>
+      }
       @if (RaceMode)
       {
         var placement = 1 + foes.Count(f => f > userProgress);
@@ -185,9 +193,8 @@ else
         </p>
       }
       <div class="mt-4 flex justify-center gap-3">
-        <button class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="ResetAndStart">Restart</button>
-        <a class="rounded-lg bg-primary text-white px-4 py-2 font-semibold" href="/cornering-quiz">Review full quiz</a>
-        <a class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" href="/race-menu">Difficulty menu</a>
+        <button class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="ResetAndStart">Try again</button>
+        <a class="rounded-lg bg-primary text-white px-4 py-2 font-semibold" href="/race-menu">Back to menu</a>
       </div>
     </div>
   }
@@ -200,17 +207,28 @@ else
   [Parameter] public bool ShowExplanation { get; set; } = true;
   [Parameter] public bool RaceMode { get; set; } = false;
   [Parameter] public bool Timed { get; set; } = false;
+  // When true (default), the quiz in StepMode will auto-start on first render.
+  // Set to false to defer starting until the parent explicitly calls StartFromParent().
+  [Parameter] public bool AutoStart { get; set; } = true;
   // Raised when a step (question) is shown; argument is 1-based step number
   [Parameter] public EventCallback<int> OnStepStarted { get; set; }
   // Raised whenever the current question becomes answered or unanswered
   [Parameter] public EventCallback<bool> OnAnswerStateChanged { get; set; }
+  // Raised when the user presses "Check answer" in StepMode indicating whether it was correct
+  [Parameter] public EventCallback<bool> OnAnswerChecked { get; set; }
   // Raised with total answered count whenever it changes (counts any answered, not only correct)
   [Parameter] public EventCallback<int> OnAnsweredCountChanged { get; set; }
+  // Raised when the user completes all questions in StepMode; parent can wait for race finish
+  [Parameter] public EventCallback OnFinished { get; set; }
   [Parameter] public int TimeLimitSeconds { get; set; } = 90;
   private int current = 0;
   private bool stepChecked = false;
   private bool finished = false;
   private bool started = false;
+  private DateTime? _startedUtc;
+  private DateTime? _finishedUtc;
+  private TimeSpan? _elapsed;
+  private bool _showElapsed = false;
   private int timeLeft;
   private System.Timers.Timer? _timer;
   private double userProgress = 0; // 0..1
@@ -333,6 +351,9 @@ else
     current = 0;
     stepChecked = false;
     finished = false;
+    _startedUtc = DateTime.UtcNow;
+    _finishedUtc = null;
+    _elapsed = null;
     userProgress = 0; foes[0] = foes[1] = 0; started = true;
     if (Timed)
     {
@@ -356,11 +377,14 @@ else
       var q = questions[current];
       committed.Add(q.Id);
       _ = OnAnswerStateChanged.InvokeAsync(true);
+      // Also notify correctness result for game logic (e.g., speed penalty on wrong answers)
+      var chosenOk = answers.TryGetValue(q.Id, out var a) && a == q.CorrectIndex;
+      _ = OnAnswerChecked.InvokeAsync(chosenOk);
       _ = OnAnsweredCountChanged.InvokeAsync(committed.Count);
     }
   }
 
-  private void Next()
+  private async Task Next()
   {
   if (current < questions.Count - 1)
     {
@@ -396,8 +420,7 @@ else
         var jitter = 0.8 + _rng.NextDouble() * 0.4;
         foes[i] = Math.Min(1, foes[i] + foeBase[i] * (1.0 / questions.Count) * jitter);
       }
-      finished = true;
-      StopTimer();
+      await FinishAsync();
     }
   }
 
@@ -418,8 +441,7 @@ else
       }
       if (timeLeft == 0)
       {
-        finished = true;
-        StopTimer();
+        await FinishAsync();
       }
       await InvokeAsync(StateHasChanged);
     };
@@ -438,7 +460,7 @@ else
 
   protected override void OnAfterRender(bool firstRender)
   {
-    if (firstRender && StepMode && !started)
+    if (firstRender && StepMode && !started && AutoStart)
     {
       ResetAndStart();
     }
@@ -448,6 +470,45 @@ else
   public void Dispose()
   {
     StopTimer();
+  }
+
+  // Allow parent to explicitly start the StepMode flow when AutoStart is false
+  public void StartFromParent()
+  {
+    if (!started)
+    {
+      ResetAndStart();
+    }
+  }
+
+  // Emit completion: compute elapsed immediately (quiz duration), but defer showing until parent reveals
+  private async Task FinishAsync()
+  {
+    if (!finished)
+    {
+      finished = true;
+    }
+    _finishedUtc ??= DateTime.UtcNow;
+    _elapsed = (_startedUtc.HasValue) ? _finishedUtc.Value - _startedUtc.Value : null;
+    _showElapsed = false; // hide until race finishes
+    StopTimer();
+    await InvokeAsync(StateHasChanged);
+    try { if (OnFinished.HasDelegate) await OnFinished.InvokeAsync(); } catch { }
+  }
+
+  // Called by parent when the race completes its final lap to reveal the elapsed time
+  public void RevealElapsed()
+  {
+    _showElapsed = true;
+    InvokeAsync(StateHasChanged);
+  }
+
+  // Called by parent to set a specific elapsed value and reveal it (e.g., max of quiz vs. car time)
+  public void RevealElapsedWith(TimeSpan elapsed)
+  {
+    _elapsed = elapsed;
+    _showElapsed = true;
+    InvokeAsync(StateHasChanged);
   }
 
   private record Question(int Number, string Text, List<string> Options, int CorrectIndex, Func<Question, string>? calculation = null, string? explanationHtml = null)

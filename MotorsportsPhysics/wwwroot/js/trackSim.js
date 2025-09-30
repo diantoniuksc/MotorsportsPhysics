@@ -25,7 +25,10 @@ export function init(svgEl, opts = {}) {
   if (cars.length === 0) throw new Error('No car sprites found (.carSprite or #carSprite)');
 
   let playing = false;
-  let pxPerSec = speed;
+  // Base speed from app logic; effective speed may be reduced by penalty multiplier
+  let pxPerSecBase = speed;
+  let penaltyMul = 1.0;
+  let pxPerSec = pxPerSecBase * penaltyMul;
   let startTime = 0;
   let traveled = 0; // pixels along the path
   let rafId = 0;
@@ -40,10 +43,9 @@ export function init(svgEl, opts = {}) {
   let answeredCount = 0;
   // Lap counter increments each time the car returns to start (first return => lap 1)
   let lapCounter = 0;
-  // Per-lap speed model: speed(px/s) = BASE + lap * STEP
-  const LAP_BASE = 100; // px/s
-  const LAP_STEP = 45;  // px/s per lap
-  const lapSpeedFor = (lap) => Math.max(0, LAP_BASE + lap * LAP_STEP);
+  // Penalty that lasts until the next completed lap (null when inactive)
+  let penaltyUntilLap = null;
+  // Note: Speed remains constant across laps unless explicitly adjusted by app logic
   // Optional .NET listener for speed updates
   /** @type {any|null} */
   let speedListener = null;
@@ -55,7 +57,7 @@ export function init(svgEl, opts = {}) {
       const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
       // Throttle to ~6 Hz unless forced
       if (!force && nowMs - lastSpeedEmitMs < 160) return;
-      const v = Math.round(pxPerSec);
+  const v = Math.round(pxPerSec);
       if (!force && v === lastSpeedReported) return;
       lastSpeedReported = v;
       lastSpeedEmitMs = nowMs;
@@ -66,6 +68,23 @@ export function init(svgEl, opts = {}) {
     try { speedListener = dotNetRef; emitSpeed(true); } catch { speedListener = null; }
   };
   const unregisterSpeedListener = () => { speedListener = null; };
+  // Optional .NET listener for lap updates
+  /** @type {any|null} */
+  let lapListener = null;
+  let lastLapReported = NaN;
+  const emitLap = (force = false) => {
+    try {
+      if (!lapListener) return;
+      const v = Number(lapCounter);
+      if (!force && v === lastLapReported) return;
+      lastLapReported = v;
+      lapListener.invokeMethodAsync('OnLapChanged', v);
+    } catch { /* ignore */ }
+  };
+  const registerLapListener = (dotNetRef) => {
+    try { lapListener = dotNetRef; emitLap(true); } catch { lapListener = null; }
+  };
+  const unregisterLapListener = () => { lapListener = null; };
   /** @type {Set<(dt:number)=>boolean>} */
   const tickers = new Set(); // per-frame observers; return true to unregister
 
@@ -284,17 +303,26 @@ export function init(svgEl, opts = {}) {
       if (wasOutside_log && dist <= innerEff) {
         if (!lastReportMs || nowMs - lastReportMs > 500) {
           lapCounter += 1;
-          const newLapSpeed = lapSpeedFor(lapCounter);
-          dlog('start-return', { dist: Number(dist.toFixed(2)), lap: lapCounter, answeredCount, newLapSpeed });
-          try { dlog("New speed: " + newLapSpeed); setSpeed(newLapSpeed); } catch {}
+          dlog('start-return', { dist: Number(dist.toFixed(2)), lap: lapCounter, answeredCount });
           try { emitSpeed(true); } catch {}
+          try { emitLap(true); } catch {}
+          // If a lap-long penalty was set, and we've reached or passed the target lap, clear it now
+          if (penaltyUntilLap !== null && lapCounter >= penaltyUntilLap) {
+            penaltyUntilLap = null;
+            penaltyMul = 1.0;
+            pxPerSec = pxPerSecBase * penaltyMul;
+            dlog('penalty:clearOnLap', { lapCounter, base: pxPerSecBase, pxPerSec });
+            emitSpeed(true);
+          }
           lastReportMs = nowMs;
-          // Gate: if user hasn't answered at least 'lapCounter' questions, pause at start
+          // Gate: if user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
           if (answeredCount < lapCounter) {
             // Snap to the exact start point, then stop
             try { traveled = startLen; render(traveled); } catch {}
             try { setSpeed(0); } catch {}
             try { emitSpeed(true); } catch {}
+            // Keep current lap value visible while paused
+            try { emitLap(true); } catch {}
             pausedForQuestion = true;
             try { pause(); } catch {}
             return true; // unregister this logger (we halted)
@@ -332,17 +360,46 @@ export function init(svgEl, opts = {}) {
     startLen = traveled;
     recomputeStartXY();
     render(traveled);
+    try { emitLap(true); } catch {}
     dlog('reset', { traveled });
   }
   function setSpeed(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return;
     // Allow 0 to keep the car stationary; negative values treated as 0
-    pxPerSec = Math.max(0, n);
+    pxPerSecBase = Math.max(0, n);
+    pxPerSec = pxPerSecBase * penaltyMul;
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
-    dlog('setSpeed', { input: v, pxPerSec });
+    dlog('setSpeed', { input: v, base: pxPerSecBase, penaltyMul, pxPerSec });
     // Force immediate emit when transitioning to zero so UI reflects a stop even within throttle window
     emitSpeed(pxPerSec === 0);
+  }
+
+  function applyPenalty(multiplier, durationMs) {
+    const m = Math.max(0, Math.min(1, Number(multiplier)));
+    const d = Math.max(0, Number(durationMs) || 0);
+    penaltyMul = m;
+    pxPerSec = pxPerSecBase * penaltyMul;
+    dlog('applyPenalty', { multiplier: penaltyMul, durationMs: d, base: pxPerSecBase, pxPerSec });
+    emitSpeed(true);
+    if (d > 0) {
+      try { clearTimeout(applyPenalty._t); } catch {}
+      applyPenalty._t = setTimeout(() => {
+        penaltyMul = 1.0;
+        pxPerSec = pxPerSecBase * penaltyMul;
+        dlog('penalty:end', { base: pxPerSecBase, pxPerSec });
+        emitSpeed(true);
+      }, d);
+    }
+  }
+  // Apply a penalty multiplier that remains active until the next completed lap
+  function applyPenaltyForNextLap(multiplier) {
+    const m = Math.max(0, Math.min(1, Number(multiplier)));
+    penaltyMul = m;
+    pxPerSec = pxPerSecBase * penaltyMul;
+    penaltyUntilLap = (lapCounter || 0) + 1; // clear when lapCounter reaches this value
+    dlog('applyPenaltyForNextLap', { multiplier: penaltyMul, clearAtLap: penaltyUntilLap, base: pxPerSecBase, pxPerSec });
+    emitSpeed(true);
   }
   function setTransform(txNew, tyNew, sNew) {
     tx = Number(txNew) || 0;
@@ -361,6 +418,16 @@ export function init(svgEl, opts = {}) {
     // re-render so change takes effect immediately
     render(traveled);
     dlog('setRotation', { rotationOffset });
+  }
+  function adjustBaseSpeed(delta) {
+    const d = Number(delta);
+    if (!Number.isFinite(d)) return;
+    const before = pxPerSecBase;
+    pxPerSecBase = Math.max(0, pxPerSecBase + d);
+    pxPerSec = pxPerSecBase * penaltyMul;
+    if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
+    dlog('adjustBaseSpeed', { before, delta: d, base: pxPerSecBase, penaltyMul, pxPerSec });
+    emitSpeed(true);
   }
   function playForLaps(laps, _targetSpeed, haltOnFinish = true) {
     let targetLaps = Math.max(0, Number(laps) || 0);
@@ -458,11 +525,12 @@ export function init(svgEl, opts = {}) {
     pause();
     tickers.clear();
     unregisterSpeedListener();
+    unregisterLapListener();
     dlog('dispose');
   }
 
   // Initial render to place the car at the path start (with optional offset)
   render(traveled);
 
-  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, registerSpeedListener, unregisterSpeedListener };
+  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, adjustBaseSpeed, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, registerSpeedListener, unregisterSpeedListener, registerLapListener, unregisterLapListener, applyPenalty, applyPenaltyForNextLap };
 }
