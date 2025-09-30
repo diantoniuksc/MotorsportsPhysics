@@ -40,10 +40,18 @@
       }
     </svg>
   </div>
+  @if (ShowSpeed)
+  {
+  <div class="absolute top-3 right-3 bg-black/60 text-white rounded-md px-3 py-1 text-sm shadow-md select-none race-speed-badge">
+      <span class="opacity-80 mr-1">Speed:</span>
+      <span class="font-semibold">@_speedDisplay</span>
+      <span class="opacity-70 ml-1">px/s</span>
+    </div>
+  }
   @if (!string.IsNullOrEmpty(Title))
   {
     <div class="absolute bottom-0 left-0 p-6 text-white pointer-events-none">
-      <h2 class="text-3xl sm:text-4xl font-bold">@Title</h2>
+      <h2 class="text-3xl sm:text-4xl font-bold race-title">@Title</h2>
     </div>
   }
 </div>
@@ -53,6 +61,7 @@
   [Parameter] public string Title { get; set; } = "";
   [Parameter] public IEnumerable<CarSprite>? Cars { get; set; }
   [Parameter] public int Speed { get; set; } = 180;
+  [Parameter] public bool ShowSpeed { get; set; } = true;
   [Parameter] public double StartRotation { get; set; } = 270;
   [Parameter] public double AngleSmoothing { get; set; } = 0.18;
   // Shift initial position along the path by a fraction of total length (-1..1). Positive moves forward; negative moves earlier/back.
@@ -66,7 +75,7 @@
   [Parameter] public double PathScaleX { get; set; } = 10.0;
   [Parameter] public double PathScaleY { get; set; } = 1.0;
   // Path visibility & styling (visible by default for debugging)
-  [Parameter] public bool ShowPath { get; set; } = true;
+  [Parameter] public bool ShowPath { get; set; } = false;
   [Parameter] public double PathWidth { get; set; } = 2.0;
   [Parameter] public double PathOpacity { get; set; } = 0.7;
   [Parameter] public string PathColor { get; set; } = "#00bcd4";
@@ -80,12 +89,16 @@
   private IJSObjectReference? _module;
   private IJSObjectReference? _anim;
   private CancellationTokenSource? _cts;
+  private bool _started = false;
+  private DotNetObjectReference<RaceTrack>? _selfRef;
+  private int _speedCurrent = 0;
+  private string _speedDisplay => _speedCurrent.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=9");
-  _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction });
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=11");
+  _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction, showStartMarker = this.ShowStartMarker });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
     {
@@ -96,6 +109,10 @@
       // Start playing at speed 0 so the car remains stationary
   await _anim.InvokeVoidAsync("setSpeed", 0);
       await _anim.InvokeVoidAsync("play");
+      // Register for speed updates
+      _selfRef = DotNetObjectReference.Create(this);
+      try { await _anim.InvokeVoidAsync("registerSpeedListener", _selfRef); } catch { }
+      _started = true;
   // Sync initial answered state
   await _anim.InvokeVoidAsync("setQuestionAnswered", QuestionAnswered);
   await _anim.InvokeVoidAsync("setAnsweredCount", AnsweredCount);
@@ -173,15 +190,20 @@
     }
     if (_anim is not null)
     {
+      try { await _anim.InvokeVoidAsync("unregisterSpeedListener"); } catch { }
       try { await _anim.InvokeVoidAsync("dispose"); } catch { }
     }
     if (_module is not null)
     {
       try { await _module.DisposeAsync(); } catch { }
     }
+    _selfRef?.Dispose();
+    _selfRef = null;
   }
 
   public record CarSprite(string Src, double Width = 70, double Height = 40, double Offset = 0);
+
+  [Parameter] public bool ShowStartMarker { get; set; } = false;
 
   private string PathD =
     "M612.508 423.151C438.898 431.914 342.384 437.99 157.525 430.869L105.314 425.08C75.8902 420.87 59.5932 415.586 30.7261 403.212L2.24728 372.338C-0.27815 353.794 0.792105 343.641 7.67182 326.028C12.3987 316.855 17.2131 311.847 35.4726 303.516C52.7043 299.586 62.4797 297.497 89.718 303.516C101.939 305.194 112.634 312.46 139.895 338.892C186.892 355.437 189.833 355.243 196.853 355.615C225.262 355.854 241.088 356.2 271.44 352.399C288.644 345.87 298.524 342.547 312.802 331.817C323.327 322.255 329.179 316.875 336.535 306.089C340.464 295.428 342.557 289.419 345.35 278.432C348.644 263.111 348.231 253.314 345.35 234.694C336.411 223.188 329.636 217.788 316.193 208.966C301.988 200.751 291.955 196.688 270.762 190.314C238.172 177.054 220.704 168.949 192.106 152.365C181.637 146.763 176.722 142.797 171.764 132.426V111.201V75.8249C175.638 56.9734 179.604 47.1064 198.209 34.0172C229.62 14.5551 250.567 9.50283 289.07 2.50056C322.807 -0.953666 340.821 2.07071 373.15 6.35973C386.721 10.1824 394.257 12.7043 407.054 20.51C417.914 27.5802 425.656 33.3101 438.245 48.8107C446.837 60.4237 448.531 66.6711 451.806 79.6841C452.001 123.435 453.647 147.742 461.977 190.314C467.046 203.524 471.306 210.829 480.285 223.76C492.701 243.258 502.201 247.655 506.73 248.201C556.392 258.079 583.992 263.118 632.851 271.356C652.515 279.189 676.673 291.56 685.062 296.441C693.451 301.322 696.107 303.287 699.979 312.521C700.986 324.059 701.654 330.603 699.979 340.178C696.576 355.747 693.369 364.21 685.062 378.77C677.865 392.185 672.803 399.039 659.295 408.357C642.011 417.222 631.877 420.803 612.508 423.151Z";
@@ -195,18 +217,28 @@
   {
     if (_anim is null) return;
     var s = speed ?? this.Speed;
-    await _anim.InvokeVoidAsync("setSpeed", 0);
-    // Wait for start delay and ramp if configured
-    if (StartDelaySeconds > 0 || AccelerationSeconds > 0)
+    // If not yet started, apply optional start delay + ramp; otherwise keep current speed to avoid flicker
+    if (!_started)
     {
-      // If a ramp is in progress, cancel and restart
-      _cts?.Cancel();
-      _cts = new CancellationTokenSource();
-      // Kick off ramp separately to the per-step target speed
-      _ = StartWithRampAsync(_cts.Token, s);
+      if (StartDelaySeconds > 0 || AccelerationSeconds > 0)
+      {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _ = StartWithRampAsync(_cts.Token, s);
+      }
+      else
+      {
+        await _anim.InvokeVoidAsync("setSpeed", s);
+      }
+    }
+    else if (speed.HasValue)
+    {
+      // If already running and a specific speed is requested, set it immediately (no ramp)
+      await _anim.InvokeVoidAsync("setSpeed", s);
     }
     // playForLaps will ensure playing and only count distance; target speed will be applied by the ramp
     await _anim.InvokeVoidAsync("playForLaps", laps, s, haltOnFinish);
+    _started = true;
   }
 
   protected override async Task OnParametersSetAsync()
@@ -216,5 +248,16 @@
       try { await _anim.InvokeVoidAsync("setQuestionAnswered", QuestionAnswered); } catch { }
       try { await _anim.InvokeVoidAsync("setAnsweredCount", AnsweredCount); } catch { }
     }
+  }
+
+  [JSInvokable]
+  public Task OnSpeedChanged(int speed)
+  {
+    _speedCurrent = speed;
+    if (ShowSpeed)
+    {
+      try { InvokeAsync(StateHasChanged); } catch { }
+    }
+    return Task.CompletedTask;
   }
 }

@@ -40,6 +40,32 @@ export function init(svgEl, opts = {}) {
   let answeredCount = 0;
   // Lap counter increments each time the car returns to start (first return => lap 1)
   let lapCounter = 0;
+  // Per-lap speed model: speed(px/s) = BASE + lap * STEP
+  const LAP_BASE = 100; // px/s
+  const LAP_STEP = 45;  // px/s per lap
+  const lapSpeedFor = (lap) => Math.max(0, LAP_BASE + lap * LAP_STEP);
+  // Optional .NET listener for speed updates
+  /** @type {any|null} */
+  let speedListener = null;
+  let lastSpeedEmitMs = 0;
+  let lastSpeedReported = NaN;
+  const emitSpeed = (force = false) => {
+    try {
+      if (!speedListener) return;
+      const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      // Throttle to ~6 Hz unless forced
+      if (!force && nowMs - lastSpeedEmitMs < 160) return;
+      const v = Math.round(pxPerSec);
+      if (!force && v === lastSpeedReported) return;
+      lastSpeedReported = v;
+      lastSpeedEmitMs = nowMs;
+      speedListener.invokeMethodAsync('OnSpeedChanged', v);
+    } catch { /* ignore */ }
+  };
+  const registerSpeedListener = (dotNetRef) => {
+    try { speedListener = dotNetRef; emitSpeed(true); } catch { speedListener = null; }
+  };
+  const unregisterSpeedListener = () => { speedListener = null; };
   /** @type {Set<(dt:number)=>boolean>} */
   const tickers = new Set(); // per-frame observers; return true to unregister
 
@@ -75,10 +101,12 @@ export function init(svgEl, opts = {}) {
   let _startPt = path.getPointAtLength(startLen);
   let startX = _startPt.x * s + tx;
   let startY = _startPt.y * s + ty;
+  const showStartMarker = !!opts.showStartMarker;
   /** @type {SVGCircleElement|null} */
   let startMarker = null;
   function updateStartMarker() {
     try {
+      if (!showStartMarker) return; // disabled
       if (!startMarker) {
         startMarker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         startMarker.setAttribute('r', '4');
@@ -256,13 +284,17 @@ export function init(svgEl, opts = {}) {
       if (wasOutside_log && dist <= innerEff) {
         if (!lastReportMs || nowMs - lastReportMs > 500) {
           lapCounter += 1;
-          dlog('start-return', { dist: Number(dist.toFixed(2)), lap: lapCounter, answeredCount });
+          const newLapSpeed = lapSpeedFor(lapCounter);
+          dlog('start-return', { dist: Number(dist.toFixed(2)), lap: lapCounter, answeredCount, newLapSpeed });
+          try { dlog("New speed: " + newLapSpeed); setSpeed(newLapSpeed); } catch {}
+          try { emitSpeed(true); } catch {}
           lastReportMs = nowMs;
           // Gate: if user hasn't answered at least 'lapCounter' questions, pause at start
           if (answeredCount < lapCounter) {
             // Snap to the exact start point, then stop
             try { traveled = startLen; render(traveled); } catch {}
             try { setSpeed(0); } catch {}
+            try { emitSpeed(true); } catch {}
             pausedForQuestion = true;
             try { pause(); } catch {}
             return true; // unregister this logger (we halted)
@@ -309,6 +341,8 @@ export function init(svgEl, opts = {}) {
     pxPerSec = Math.max(0, n);
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
     dlog('setSpeed', { input: v, pxPerSec });
+    // Force immediate emit when transitioning to zero so UI reflects a stop even within throttle window
+    emitSpeed(pxPerSec === 0);
   }
   function setTransform(txNew, tyNew, sNew) {
     tx = Number(txNew) || 0;
@@ -423,11 +457,12 @@ export function init(svgEl, opts = {}) {
   function dispose() {
     pause();
     tickers.clear();
+    unregisterSpeedListener();
     dlog('dispose');
   }
 
   // Initial render to place the car at the path start (with optional offset)
   render(traveled);
 
-  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount };
+  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, registerSpeedListener, unregisterSpeedListener };
 }
