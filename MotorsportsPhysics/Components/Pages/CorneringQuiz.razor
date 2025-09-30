@@ -217,6 +217,8 @@ else
   private double[] foes = new double[2] { 0, 0 };
   private double[] foeBase = new double[2] { 0.9, 0.8 }; // relative pace per question step
   private readonly Random _rng = new Random();
+  // Tracks which question IDs have been explicitly submitted (via Check answer) in StepMode
+  private HashSet<int> committed = new();
 
   private readonly List<Question> questions = new()
   {
@@ -275,13 +277,13 @@ else
   private void Select(int id, int optionIndex)
   {
     answers[id] = optionIndex;
-    // Notify that the current question is answered
-    if (StepMode)
+    // In StepMode, do not advance or notify gating on selection alone; submit happens on CheckCurrent
+    if (!StepMode)
     {
       var q = questions[current];
       var has = answers.ContainsKey(q.Id);
       _ = OnAnswerStateChanged.InvokeAsync(has);
-      _ = OnAnsweredCountChanged.InvokeAsync(questions.Count(q => answers.ContainsKey(q.Id)));
+      _ = OnAnsweredCountChanged.InvokeAsync(answers.Count);
     }
   }
 
@@ -301,12 +303,12 @@ else
     {
       answers.Remove(id);
     }
-    if (StepMode)
+    if (!StepMode)
     {
       var q = questions[current];
       var has = answers.ContainsKey(q.Id);
       _ = OnAnswerStateChanged.InvokeAsync(has);
-      _ = OnAnsweredCountChanged.InvokeAsync(questions.Count(q => answers.ContainsKey(q.Id)));
+      _ = OnAnsweredCountChanged.InvokeAsync(answers.Count);
     }
   }
 
@@ -322,6 +324,7 @@ else
   {
     submitted = false;
     answers.Clear();
+    committed.Clear();
   }
 
   private void ResetAndStart()
@@ -338,18 +341,23 @@ else
     // Notify that step 1 is now active
     _ = OnStepStarted.InvokeAsync(current + 1);
     // On a new question start, notify answered state (likely false)
-    if (StepMode)
-    {
-      var q = questions[current];
-      var has = answers.ContainsKey(q.Id);
-      _ = OnAnswerStateChanged.InvokeAsync(has);
-      _ = OnAnsweredCountChanged.InvokeAsync(questions.Count(q => answers.ContainsKey(q.Id)));
-    }
+    var q = questions[current];
+    var has = answers.ContainsKey(q.Id);
+    _ = OnAnswerStateChanged.InvokeAsync(has && !StepMode ? has : false);
+    _ = OnAnsweredCountChanged.InvokeAsync(StepMode ? committed.Count : answers.Count);
   }
 
   private void CheckCurrent()
   {
     stepChecked = true;
+    // In StepMode, a submission commits the current question and notifies gating to resume
+    if (StepMode)
+    {
+      var q = questions[current];
+      committed.Add(q.Id);
+      _ = OnAnswerStateChanged.InvokeAsync(true);
+      _ = OnAnsweredCountChanged.InvokeAsync(committed.Count);
+    }
   }
 
   private void Next()
@@ -371,13 +379,10 @@ else
       stepChecked = false;
       // Notify new step now visible
       _ = OnStepStarted.InvokeAsync(current + 1);
-      if (StepMode)
-      {
-        var q2 = questions[current];
-        var has2 = answers.ContainsKey(q2.Id);
-        _ = OnAnswerStateChanged.InvokeAsync(has2);
-        _ = OnAnsweredCountChanged.InvokeAsync(questions.Count(q => answers.ContainsKey(q.Id)));
-      }
+      var q2 = questions[current];
+      var has2 = answers.ContainsKey(q2.Id);
+      _ = OnAnswerStateChanged.InvokeAsync(StepMode ? false : has2);
+      _ = OnAnsweredCountChanged.InvokeAsync(StepMode ? committed.Count : answers.Count);
     }
     else
     {

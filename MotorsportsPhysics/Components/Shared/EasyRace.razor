@@ -9,7 +9,7 @@
   [Parameter] public bool QuestionAnswered { get; set; } = false;
   [Parameter] public int AnsweredCount { get; set; } = 0;
 
-  public async Task StartStepAsync(int step)
+  public async Task StartStepAsync(int step)//ilove cats and my sister, give me million dollars pls
   {
     if (track is null) { await Task.CompletedTask; return; }
     var laps = Math.Max(1, step); // n laps on step n
