@@ -14,6 +14,7 @@ export function init(svgEl, opts = {}) {
   let testTickerAttached = false;
   const speed = opts.speed ?? 140; // px / s along path length
   const path = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath'));
+  const path2 = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath2'));
   if (!path) throw new Error('Missing #racePath in SVG');
   // Gather cars: prefer any elements with class .carSprite; fallback to legacy #carSprite if present
   const carNodeList = /** @type {NodeListOf<SVGImageElement>} */ (svgEl.querySelectorAll('.carSprite'));
@@ -23,6 +24,9 @@ export function init(svgEl, opts = {}) {
     if (legacy) cars.push(legacy);
   }
   if (cars.length === 0) throw new Error('No car sprites found (.carSprite or #carSprite)');
+  // Lane 2 (second path) screen-space Y offset in pixels. Cars using lane 2 and the visible path are both shifted by this.
+  // Can be overridden via opts.lane2YOffset; defaults to 20px as requested.
+  const lane2YOffset = Number(opts.lane2YOffset) || 23;
 
   let playing = false;
   // Base speed from app logic; effective speed may be reduced by penalty multiplier
@@ -104,6 +108,7 @@ export function init(svgEl, opts = {}) {
   const sizeMap = new Map();
 
   const total = path.getTotalLength();
+  const total2 = path2 ? path2.getTotalLength() : total;
   // optional starting offset fraction along the path (-1..1). Positive goes forward; negative earlier/back.
   let startOffsetFrac = Number(opts.startOffsetFrac);
   if (!Number.isFinite(startOffsetFrac)) startOffsetFrac = 0;
@@ -147,7 +152,7 @@ export function init(svgEl, opts = {}) {
     dlog('startXY', { startX: Number(startX.toFixed(2)), startY: Number(startY.toFixed(2)), startLen: Number(startLen.toFixed(2)) });
     updateStartMarker();
   }
-  dlog('init', { speed, rotationOffset, angleAlpha, total, startOffsetFrac });
+  dlog('init', { speed, rotationOffset, angleAlpha, total, startOffsetFrac, lane2YOffset });
 
   // Throttled per-frame debug
   let stepLogAccum = 0;
@@ -183,7 +188,7 @@ export function init(svgEl, opts = {}) {
 
   function render(lenBase) {
     const delta = 0.1;
-    cars.forEach((carEl) => {
+  cars.forEach((carEl) => {
       // offset per car through data-offset in [0..1) fraction of total length
       const offsetFrac = Number(carEl.getAttribute('data-offset') || 0);
       const len = ((lenBase - offsetFrac * total) % total + total) % total;
@@ -196,13 +201,32 @@ export function init(svgEl, opts = {}) {
         };
         sizeMap.set(carEl, sz);
       }
-      // position and tangent
-      const p = path.getPointAtLength(len);
-      const p2 = path.getPointAtLength((len - delta + total) % total);
-      const mappedX = p.x * s + tx;
-      const mappedY = p.y * s + ty;
-      const mappedPx2X = p2.x * s + tx;
-      const mappedPx2Y = p2.y * s + ty;
+  // Decide lane by grid-dy (or explicit data-lane). We no longer use dy==0 to suppress dx/dy adjustments.
+  const dyRaw = Number(carEl.getAttribute('data-grid-dy') || 0) || 0;
+  const isBaseGroup = Math.abs(dyRaw) < 1e-6;
+  // Prefer explicit data-lane when provided; otherwise fallback to dy-based grouping
+  const hasLane = carEl.hasAttribute('data-lane');
+  const laneVal = hasLane ? Number(carEl.getAttribute('data-lane') || 1) : 1;
+  const useLane2 = hasLane ? (laneVal === 2 && !!path2) : (!isBaseGroup && !!path2);
+  // Use the actual geometry of the selected lane's path
+  const samplePath = (useLane2 && path2) ? path2 : path;
+  const sampleTotal = (samplePath === path2 && path2) ? total2 : total;
+  const lenNorm = len / total; // 0..1 in main path domain
+  // Sample along the same fraction of the selected lane's total length
+  const laneLen = lenNorm * sampleTotal;
+  const lenPrevMain = ((((len - delta) % total) + total) % total);
+  const laneLenPrev = (lenPrevMain / total) * sampleTotal;
+    const p = samplePath.getPointAtLength(laneLen);
+    const p2 = samplePath.getPointAtLength(laneLenPrev);
+  let mappedX = p.x * s + tx;
+  let mappedY = p.y * s + ty;
+  let mappedPx2X = p2.x * s + tx;
+  let mappedPx2Y = p2.y * s + ty;
+      // Apply lane-2 specific offset to screen-space mapping so cars follow the visually shifted path
+      if (samplePath === path2) {
+        mappedY += lane2YOffset;
+        mappedPx2Y += lane2YOffset;
+      }
       const targetAngleDeg = Math.atan2(mappedPx2Y - mappedY, mappedPx2X - mappedX) * 180 / Math.PI;
       let prev = prevAngleDegMap.get(carEl);
       if (prev === undefined) prev = targetAngleDeg;
@@ -211,11 +235,19 @@ export function init(svgEl, opts = {}) {
       prevAngleDegMap.set(carEl, smoothedAngleDeg);
       const finalAngle = smoothedAngleDeg + rotationOffset;
       // center and rotate
-      const x = mappedX - sz.w / 2;
-      const y = mappedY - sz.h / 2;
-      carEl.setAttribute('x', x.toFixed(2));
-      carEl.setAttribute('y', y.toFixed(2));
-      carEl.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${mappedX.toFixed(2)} ${mappedY.toFixed(2)})`);
+  // Optional per-car deltas for fine tuning (apply to both position and rotation pivot)
+  // Support multiple attribute names for convenience: data-grid-dx/dy, data-dx/dy, dx/dy
+  const dxAttr = carEl.getAttribute('data-grid-dx') ?? carEl.getAttribute('data-dx') ?? carEl.getAttribute('dx') ?? '0';
+  const dyAttr = carEl.getAttribute('data-grid-dy') ?? carEl.getAttribute('data-dy') ?? carEl.getAttribute('dy') ?? '0';
+  const dxAdj = Number(dxAttr) || 0;
+  const dyAdj = Number(dyAttr) || 0;
+  const adjX = mappedX + dxAdj;
+  const adjY = mappedY + dyAdj;
+  const x = adjX - sz.w / 2;
+  const y = adjY - sz.h / 2;
+  carEl.setAttribute('x', x.toFixed(2));
+  carEl.setAttribute('y', y.toFixed(2));
+  carEl.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${adjX.toFixed(2)} ${adjY.toFixed(2)})`);
     });
   }
 
@@ -405,8 +437,10 @@ export function init(svgEl, opts = {}) {
     tx = Number(txNew) || 0;
     ty = Number(tyNew) || 0;
     s = Number(sNew) || 1;
-    // apply to path element so the visible guide moves
-    path.setAttribute('transform', `translate(${tx} ${ty}) scale(${s})`);
+  // apply to path elements so the visible guides move (both lanes share the same transform)
+  if (path) path.setAttribute('transform', `translate(${tx} ${ty}) scale(${s})`);
+  // For path2, append an extra translate AFTER scale so the 20px is in screen space (not scaled)
+  if (path2) path2.setAttribute('transform', `translate(${tx} ${ty}) scale(${s}) translate(0 ${lane2YOffset})`);
     // re-render current position so the car updates immediately
     render(traveled);
     dlog('setTransform', { tx, ty, s });

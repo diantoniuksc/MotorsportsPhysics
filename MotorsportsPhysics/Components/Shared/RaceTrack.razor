@@ -18,6 +18,17 @@
     transform="@(((PathScaleX != 1.0 || PathScaleY != 1.0) && PathScale == 1.0 && PathTranslateX == 0 && PathTranslateY == 0)
       ? $"scale({PathScaleX.ToString(System.Globalization.CultureInfo.InvariantCulture)} {PathScaleY.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
       : null)" />
+      <!-- Secondary lane path (same styling/visibility) -->
+      <path id="racePath2"
+        d="@PathD2"
+        fill="none"
+        stroke="@PathColor"
+        stroke-width="@((ShowPath ? PathWidth : 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
+        stroke-opacity="@((ShowPath ? PathOpacity : 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
+        stroke-dasharray="@(ShowPath && !string.IsNullOrEmpty(PathDashArray) ? PathDashArray : null)"
+        transform="@(((PathScaleX != 1.0 || PathScaleY != 1.0) && PathScale == 1.0 && PathTranslateX == 0 && PathTranslateY == 0)
+          ? $"scale({PathScaleX.ToString(System.Globalization.CultureInfo.InvariantCulture)} {PathScaleY.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+          : null)" />
       @if (Cars?.Any() == true)
       {
         var idx = 0;
@@ -25,11 +36,11 @@
         {
           if (idx == 0)
           {
-            <image id="carSprite" class="carSprite" href="@car.Src" width="@car.Width" height="@car.Height" data-offset="@car.Offset.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+            <image id="carSprite" class="carSprite" href="@car.Src" width="@car.Width" height="@car.Height" data-offset="@car.Offset.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-grid-dx="@car.GridDx.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-grid-dy="@car.GridDy.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-lane="@car.Lane" />
           }
           else
           {
-            <image class="carSprite" href="@car.Src" width="@car.Width" height="@car.Height" data-offset="@car.Offset.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+            <image class="carSprite" href="@car.Src" width="@car.Width" height="@car.Height" data-offset="@car.Offset.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-grid-dx="@car.GridDx.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-grid-dy="@car.GridDy.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-lane="@car.Lane" />
           }
           idx++;
         }
@@ -110,7 +121,7 @@
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=13");
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=18");
   _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction, showStartMarker = this.ShowStartMarker });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
@@ -220,7 +231,7 @@
     _selfRef = null;
   }
 
-  public record CarSprite(string Src, double Width = 70, double Height = 40, double Offset = 0);
+  public record CarSprite(string Src, double Width = 70, double Height = 40, double Offset = 0, double GridDx = 0, double GridDy = 0, int Lane = 1);
 
   [Parameter] public bool ShowStartMarker { get; set; } = false;
 
@@ -230,6 +241,10 @@
   [Parameter] public double PathScale { get; set; } = 0.77;
   [Parameter] public double PathTranslateX { get; set; } = 130.0;
   [Parameter] public double PathTranslateY { get; set; } = 39.0;
+
+  // Secondary lane path data (before transform). Uses the provided alternate SVG path.
+  private string PathD2 =
+    "M612.508 423.151C438.898 431.914 342.384 437.99 157.525 430.869L105.314 425.08C75.8902 420.87 59.5932 415.586 30.7261 403.212C12.8274 390.524 7.28976 383.829 2.24728 372.338C-0.27815 353.794 0.792105 343.641 7.67182 326.028C12.3987 316.855 17.2131 311.847 35.4726 303.516C52.7043 299.586 62.4797 297.497 89.718 303.516C96.542 306.243 106.791 307.804 146.5 331.817C166.384 343.332 177.263 349.483 198 352.399C226.409 352.638 241.088 356.2 271.44 352.399C288.644 345.87 298.524 342.547 312.802 331.817C323.327 322.255 329.179 316.875 336.535 306.089C340.464 295.427 342.557 289.419 345.35 278.432C348.644 263.111 348.231 253.314 345.35 234.694C336.411 223.188 329.636 217.788 316.193 208.966C301.988 200.751 291.955 196.688 270.762 190.314C238.172 177.054 220.704 168.949 192.106 152.365C181.637 146.763 176.722 142.797 171.764 132.426C166.247 122.447 164.651 116.989 164.5 107.5C161.777 93.8316 162.108 86.1684 164.5 72.5C168.373 53.6485 179.604 47.1064 198.209 34.0172C229.62 14.5551 250.567 9.50283 289.07 2.50056C322.807 -0.953666 340.821 2.07071 373.15 6.35973C383.933 9.79361 389.701 12.0692 407.054 20.51C415.291 26.2583 427.178 28.946 435.5 51.5C435.5 51.5 438.245 79 438.245 89V89.2674C438.244 99.6772 438.242 138.298 446.5 180.5C451.569 193.71 452.998 202.069 461.977 215C475.653 234.694 482.5 241 506.73 248.201C556.392 258.079 563.65 191.762 612.508 200C642.5 200 670.871 211.259 679.5 215C688.129 218.741 717.89 252.019 721.5 262.5C722.437 266.717 733.419 294.747 729 312.521C727.811 327.883 723.501 348.23 713 363C705.916 376.205 673.832 398.332 659.945 407.909L659.295 408.357C642.011 417.222 631.877 420.803 612.508 423.151Z";
 
   // Public control methods for parent components
   public async Task PlayLapsAsync(int laps, int? speed = null, bool haltOnFinish = true)

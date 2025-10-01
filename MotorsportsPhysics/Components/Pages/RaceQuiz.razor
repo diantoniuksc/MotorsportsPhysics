@@ -158,6 +158,10 @@ else
     {
       await _easyRace.StartStepAsync(step);
     }
+    else if (!_isEasy && _mediumRace is not null)
+    {
+      await _mediumRace.StartStepAsync(step);
+    }
   }
 
   private Task OnAnswerStateChanged(bool answered)
