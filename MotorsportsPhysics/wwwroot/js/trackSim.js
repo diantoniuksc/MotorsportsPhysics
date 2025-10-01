@@ -52,6 +52,11 @@ export function init(svgEl, opts = {}) {
   };
   let rafId = 0;
   let startSampleTimer = 0; // timer id for sampling start position from the sprite
+  // Medium-only minimum speed floor (px/s): when gateByAnsweredCount is false (Medium),
+  // enforce an effective speed >= 70 after the car first reaches that speed during the initial ramp.
+  // Read directly from opts here to avoid referencing variables declared later.
+  const minSpeedFloor = (opts.gateByAnsweredCount === false) ? 70 : 0;
+  let floorArmed = false; // becomes true once pxPerSec reaches the floor once (avoids forcing ramp)
   // Quiz gating: only allow halting when a question is NOT answered and gating is enabled.
   // gateByAnsweredCount controls whether to pause when lapCounter > answeredCount (default true)
   let gateByAnsweredCount = (opts.gateByAnsweredCount !== undefined) ? !!opts.gateByAnsweredCount : true;
@@ -206,6 +211,15 @@ export function init(svgEl, opts = {}) {
     if (!startTime) startTime = ts;
     const dt = (ts - startTime) / 1000; // s
     startTime = ts;
+    // Arm min-speed floor once we naturally reach it (avoid affecting the start ramp)
+    if (!floorArmed && minSpeedFloor > 0 && pxPerSec >= minSpeedFloor - 0.5) {
+      floorArmed = true;
+      dlog('minFloor:armed', { floor: minSpeedFloor, pxPerSec: Number(pxPerSec.toFixed(2)) });
+    }
+    // Enforce floor while playing after it’s armed
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     // move backwards by default so the car runs anticlockwise
     traveled = traveled - pxPerSec * dt;
     // normalize into [0, total)
@@ -488,6 +502,10 @@ export function init(svgEl, opts = {}) {
     // Allow 0 to keep the car stationary; negative values treated as 0
     pxPerSecBase = Math.max(0, n);
     pxPerSec = pxPerSecBase * penaltyMul;
+    // Apply floor if armed (Medium only) but do not arm here
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
     dlog('setSpeed', { input: v, base: pxPerSecBase, penaltyMul, pxPerSec });
     // Force immediate emit when transitioning to zero so UI reflects a stop even within throttle window
@@ -499,6 +517,9 @@ export function init(svgEl, opts = {}) {
     const d = Math.max(0, Number(durationMs) || 0);
     penaltyMul = m;
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     dlog('applyPenalty', { multiplier: penaltyMul, durationMs: d, base: pxPerSecBase, pxPerSec });
     emitSpeed(true);
     if (d > 0) {
@@ -516,6 +537,9 @@ export function init(svgEl, opts = {}) {
     const m = Math.max(0, Math.min(1, Number(multiplier)));
     penaltyMul = m;
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     penaltyUntilLap = (lapCounter || 0) + 1; // clear when lapCounter reaches this value
     dlog('applyPenaltyForNextLap', { multiplier: penaltyMul, clearAtLap: penaltyUntilLap, base: pxPerSecBase, pxPerSec });
     emitSpeed(true);
@@ -546,6 +570,9 @@ export function init(svgEl, opts = {}) {
     const before = pxPerSecBase;
     pxPerSecBase = Math.max(0, pxPerSecBase + d);
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
     dlog('adjustBaseSpeed', { before, delta: d, base: pxPerSecBase, penaltyMul, pxPerSec });
     emitSpeed(true);
