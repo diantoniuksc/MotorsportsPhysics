@@ -117,11 +117,17 @@
   private string _speedDisplay => _speedCurrent.ToString(System.Globalization.CultureInfo.InvariantCulture);
   private int _lapCurrent = 0;
   private string _lapDisplay => (_lapCurrent + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+  // Rank DTO to mirror JS getUserRank() result
+  public record RaceRank(int Position, int TotalCars);
+  public record CoveredDistance(int Idx, string Id, bool IsUser, double DistancePx, double? FractionOfRace);
+  public record LapSample(int Idx, string Id, bool IsUser, string Color, double DistancePx);
+  public record LapTelemetry(int Lap, double ElapsedMs, List<LapSample> Samples);
+
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
-  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=18");
+  _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/trackSim.js?v=19");
   _anim = await _module.InvokeAsync<IJSObjectReference>("init", svg, new { speed = this.Speed, startRotation = this.StartRotation, angleSmoothing = this.AngleSmoothing, startOffsetFrac = this.StartOffsetFraction, showStartMarker = this.ShowStartMarker });
     // Apply optional transform so the path and cars align
     if (_anim is not null && (PathTranslateX != 0 || PathTranslateY != 0 || Math.Abs(PathScale - 1.0) > double.Epsilon))
@@ -331,6 +337,13 @@
     await _anim.InvokeVoidAsync("adjustBaseSpeed", delta);
   }
 
+  // Set the constant base speed to an absolute value (px/s)
+  public async Task SetBaseSpeedAsync(double absolute)
+  {
+    if (_anim is null) return;
+    await _anim.InvokeVoidAsync("setSpeed", absolute);
+  }
+
   // Public start entry: ensure playing and run the configured delay + ramp to current Speed
   public async Task StartAsync(double? targetSpeed = null)
   {
@@ -350,5 +363,60 @@
     try { _cts?.Cancel(); } catch { }
     await _anim.InvokeVoidAsync("setSpeed", 0);
     await _anim.InvokeVoidAsync("pause");
+  }
+
+  // Query current user position among all cars (1-based) and the total car count
+  public async Task<RaceRank> GetUserRankAsync()
+  {
+    if (_anim is null)
+    {
+      return new RaceRank(1, 1);
+    }
+    try
+    {
+      var r = await _anim.InvokeAsync<RaceRank>("getUserRank");
+      return r ?? new RaceRank(1, 1);
+    }
+    catch
+    {
+      return new RaceRank(1, 1);
+    }
+  }
+
+  public async Task<List<CoveredDistance>> GetCoveredDistancesAsync()
+  {
+    if (_anim is null) return new List<CoveredDistance>();
+    try
+    {
+      var arr = await _anim.InvokeAsync<CoveredDistance[]>("getCoveredDistances");
+      return arr?.ToList() ?? new List<CoveredDistance>();
+    }
+    catch
+    {
+      return new List<CoveredDistance>();
+    }
+  }
+
+  public async Task SetTargetLapsAsync(int laps)
+  {
+    if (_anim is null) return;
+    await _anim.InvokeVoidAsync("setTargetLaps", laps);
+  }
+
+  public async Task<List<LapTelemetry>> GetLapTelemetryAsync()
+  {
+    if (_anim is null) return new List<LapTelemetry>();
+    try
+    {
+      var arr = await _anim.InvokeAsync<LapTelemetry[]>("getLapTelemetry");
+      return arr?.ToList() ?? new List<LapTelemetry>();
+    }
+    catch { return new List<LapTelemetry>(); }
+  }
+
+  public async Task ResetLapTelemetryAsync()
+  {
+    if (_anim is null) return;
+    try { await _anim.InvokeVoidAsync("resetLapTelemetry"); } catch { }
   }
 }

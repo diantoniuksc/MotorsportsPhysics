@@ -36,6 +36,12 @@
     await track.AdjustBaseSpeedAsync(delta);
   }
 
+  public async Task SetBaseSpeedAsync(double absolute)
+  {
+    if (track is null) return;
+    await track.SetBaseSpeedAsync(absolute);
+  }
+
   public async Task StartAsync(double? targetSpeed = null)
   {
     if (track is null) return;
@@ -46,5 +52,35 @@
   {
     if (track is null) return;
     await track.StopAsync();
+  }
+
+  public async Task<RaceTrack.RaceRank> GetUserRankAsync()
+  {
+    if (track is null) return new RaceTrack.RaceRank(1, 1);
+    return await track.GetUserRankAsync();
+  }
+
+  public async Task<List<RaceTrack.CoveredDistance>> GetCoveredDistancesAsync()
+  {
+    if (track is null) return new List<RaceTrack.CoveredDistance>();
+    return await track.GetCoveredDistancesAsync();
+  }
+
+  public async Task SetTargetLapsAsync(int laps)
+  {
+    if (track is null) return;
+    await track.SetTargetLapsAsync(laps);
+  }
+
+  public async Task<List<RaceTrack.LapTelemetry>> GetLapTelemetryAsync()
+  {
+    if (track is null) return new List<RaceTrack.LapTelemetry>();
+    return await track.GetLapTelemetryAsync();
+  }
+
+  public async Task ResetLapTelemetryAsync()
+  {
+    if (track is null) return;
+    await track.ResetLapTelemetryAsync();
   }
 }

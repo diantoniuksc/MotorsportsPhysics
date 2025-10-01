@@ -38,6 +38,7 @@ else
                    RaceMode="@_raceMode"
                    Timed="@_timed"
                    TimeLimitSeconds="@_timeLimit"
+                   RivalLabels="@_rivalLabels"
                    OnStepStarted="OnStepStarted"
                    OnAnswerStateChanged="OnAnswerStateChanged"
                    OnAnswerChecked="OnAnswerChecked"
@@ -68,6 +69,7 @@ else
         <div class="rounded-xl bg-white shadow-2xl p-8 max-w-md w-[92%] text-center">
           <h2 class="text-2xl font-extrabold mb-2">Grand Prix finished</h2>
           <p class="text-gray-700 mb-4">Congratulations! You’ve completed all laps and questions.</p>
+          <p class="text-gray-700 mb-2">Your position: <strong>@_finalPosition</strong> / @_finalTotalCars</p>
           <p class="text-gray-600">The car is no longer riding.</p>
           <div class="mt-6 flex justify-center">
             <button class="rounded-md bg-primary text-white px-6 py-2 font-semibold" @onclick="() => _grandPrixFinished = false">OK</button>
@@ -101,6 +103,12 @@ else
   private DateTime? _raceStartedUtc;
   private DateTime? _raceFinishedUtc;
   private DateTime? _quizFinishedUtc;
+  private int _finalPosition = 1;
+  private int _finalTotalCars = 1;
+  private string[] _rivalLabels = System.Array.Empty<string>();
+  private List<RaceTrack.LapTelemetry> _telemetry = new();
+  private CancellationTokenSource? _progressPumpCts;
+  private const double WrongAnswerPenaltyDelta = -30; // px/s (milder penalty)
 
 
   protected override void OnInitialized()
@@ -127,6 +135,7 @@ else
         _label = "Medium";
         _isEasy = false;
           _showAnim = true;
+        _rivalLabels = new [] { "Blue", "Green", "Purple", "Orange", "Pink" };
         break;
       case "high":
         _showExplanation = false;
@@ -136,6 +145,7 @@ else
         _label = "High";
         _isEasy = false;
           _showAnim = true;
+        _rivalLabels = new [] { "Blue", "Green", "Purple", "Orange", "Pink" };
         break;
       default:
         _showExplanation = true;
@@ -145,6 +155,7 @@ else
         _label = "Easy";
         _isEasy = true;
         _showAnim = true;
+        _rivalLabels = System.Array.Empty<string>();
         break;
     }
     _configured = true;
@@ -156,12 +167,17 @@ else
     _raceStartedUtc ??= DateTime.UtcNow;
     if (_isEasy && _easyRace is not null)
     {
+      try { await _easyRace.ResetLapTelemetryAsync(); } catch { }
+      try { await _easyRace.SetTargetLapsAsync(_quizRef?.GetTotalSteps() ?? step); } catch { }
       await _easyRace.StartStepAsync(step);
     }
     else if (!_isEasy && _mediumRace is not null)
     {
+      try { await _mediumRace.ResetLapTelemetryAsync(); } catch { }
+      try { await _mediumRace.SetTargetLapsAsync(_quizRef?.GetTotalSteps() ?? step); } catch { }
       await _mediumRace.StartStepAsync(step);
     }
+    _ = UpdateProgressBarsFromRaceAsync();
   }
 
   private Task OnAnswerStateChanged(bool answered)
@@ -180,62 +196,115 @@ else
 
   private async Task OnAnswerChecked(bool correct)
   {
-    // Case 1 (correct): increase base speed immediately
-    if (_isEasy && _easyRace is not null && correct)
+    // Correct answer: increase base speed immediately (Easy & Medium)
+    if (correct)
     {
-      await _easyRace.AdjustBaseSpeedAsync(+35); // increased boost per request
+      if (_isEasy && _easyRace is not null)
+      {
+        await _easyRace.AdjustBaseSpeedAsync(+35);
+      }
+      else if (!_isEasy && _mediumRace is not null)
+      {
+        await _mediumRace.AdjustBaseSpeedAsync(+35);
+      }
     }
-    // Case 2 (wrong): decrease base speed immediately
-    else if (_isEasy && _easyRace is not null && !correct)
+    // Incorrect answer: set absolute base speed to 50 px/s (Easy & Medium)
+    else
     {
-      await _easyRace.AdjustBaseSpeedAsync(-15); // tune as desired
+      if (_isEasy && _easyRace is not null)
+      {
+        await _easyRace.AdjustBaseSpeedAsync(WrongAnswerPenaltyDelta);
+      }
+      else if (!_isEasy && _mediumRace is not null)
+      {
+        await _mediumRace.AdjustBaseSpeedAsync(WrongAnswerPenaltyDelta);
+      }
     }
   }
 
   private Task OnQuizFinished()
   {
     _quizFinishedUtc = DateTime.UtcNow;
-    // If the car has already completed the final lap (lapCounter >= answered count), reveal immediately
     if (_answeredCount > 0 && _lastLapSeen >= _answeredCount)
     {
-      // Compute max(quiz, car)
       var quizElapsed = (_raceStartedUtc.HasValue && _quizFinishedUtc.HasValue) ? (_quizFinishedUtc.Value - _raceStartedUtc.Value) : TimeSpan.Zero;
       var carElapsed = (_raceStartedUtc.HasValue && _raceFinishedUtc.HasValue) ? (_raceFinishedUtc.Value - _raceStartedUtc.Value) : quizElapsed;
       var maxElapsed = quizElapsed > carElapsed ? quizElapsed : carElapsed;
       try { _quizRef?.RevealElapsedWith(maxElapsed); } catch { }
-      // Ensure car is stopped and overlay is shown if needed
-      _ = StopCarAsync();
       _grandPrixFinished = true;
+  StopProgressPump();
+      _ = StopCarAsync();
+      _ = CaptureFinalRankAsync();
       StateHasChanged();
       _quizFinished = false;
     }
     else
     {
-      _quizFinished = true; // wait for OnLapChanged to signal the final crossing
+      _quizFinished = true;
     }
     return Task.CompletedTask;
   }
 
-  private Task OnLapChanged(int lap)
+  private async Task OnLapChanged(int lap)
   {
     _lastLapSeen = lap;
-    // When the quiz is finished, wait for exactly 'AnsweredCount' laps to be completed, then mark race finished
-    // Note: lap is 0-based internally; AnsweredCount is the number of questions answered (1-based threshold)
+    // Refresh progress bars on each lap crossing
+    await UpdateProgressBarsFromRaceAsync();
+    // Pull and store updated per-lap telemetry
+    try
+    {
+      List<RaceTrack.LapTelemetry> snaps = new();
+      if (_isEasy && _easyRace is not null) snaps = await _easyRace.GetLapTelemetryAsync();
+      else if (!_isEasy && _mediumRace is not null) snaps = await _mediumRace.GetLapTelemetryAsync();
+      if (snaps.Count > 0)
+      {
+        // Ensure we keep unique lap numbers, append new ones only
+        var known = new HashSet<int>(_telemetry.Select(t => t.Lap));
+        foreach (var t in snaps.OrderBy(s => s.Lap))
+        {
+          if (known.Add(t.Lap)) _telemetry.Add(t);
+        }
+      }
+    }
+    catch { }
     if (_quizFinished && _answeredCount > 0 && lap >= _answeredCount)
     {
-      _quizFinished = false; // prevent duplicate calls
+      _quizFinished = false;
       _raceFinishedUtc ??= DateTime.UtcNow;
-      // Compute max(quiz, car)
       var quizElapsed = (_raceStartedUtc.HasValue && _quizFinishedUtc.HasValue) ? (_quizFinishedUtc.Value - _raceStartedUtc.Value) : TimeSpan.Zero;
       var carElapsed = (_raceStartedUtc.HasValue && _raceFinishedUtc.HasValue) ? (_raceFinishedUtc.Value - _raceStartedUtc.Value) : quizElapsed;
       var maxElapsed = quizElapsed > carElapsed ? quizElapsed : carElapsed;
       try { _quizRef?.RevealElapsedWith(maxElapsed); } catch { }
-      // Stop the car and show the finish overlay
-      _ = StopCarAsync();
       _grandPrixFinished = true;
+      StopProgressPump();
+      _ = StopCarAsync();
+      _ = CaptureFinalRankAsync();
       StateHasChanged();
     }
-    return Task.CompletedTask;
+    return;
+  }
+
+  private async Task CaptureFinalRankAsync()
+  {
+    if (!_grandPrixFinished) return; // don't compute final position until race is over
+    try
+    {
+      if (_isEasy && _easyRace is not null)
+      {
+        var r = await _easyRace.GetUserRankAsync();
+        _finalPosition = r.Position;
+        _finalTotalCars = r.TotalCars;
+      }
+      else if (!_isEasy && _mediumRace is not null)
+      {
+        var r = await _mediumRace.GetUserRankAsync();
+        _finalPosition = r.Position;
+        _finalTotalCars = r.TotalCars;
+      }
+      try { _quizRef?.SetExternalPlacement(_finalPosition, _finalTotalCars); } catch { }
+      StateHasChanged();
+    }
+    catch { }
   }
 
   private async Task StopCarAsync()
@@ -254,8 +323,86 @@ else
     StateHasChanged();
     // Defer to next render to ensure overlays are gone before starting
     await Task.Yield();
+    try {
+      if (_isEasy && _easyRace is not null) await _easyRace.ResetLapTelemetryAsync();
+      else if (!_isEasy && _mediumRace is not null) await _mediumRace.ResetLapTelemetryAsync();
+    } catch { }
+    // Set planned laps before the first step kicks in
+    try {
+      var total = _quizRef?.GetTotalSteps() ?? 0;
+      if (total > 0)
+      {
+        if (_isEasy && _easyRace is not null) await _easyRace.SetTargetLapsAsync(total);
+        else if (!_isEasy && _mediumRace is not null) await _mediumRace.SetTargetLapsAsync(total);
+      }
+    } catch { }
     // Start the quiz flow; it will trigger OnStepStarted(1) and then start the race step via _easyRace
     _quizRef?.StartFromParent();
+    _ = UpdateProgressBarsFromRaceAsync();
+    StartProgressPump();
     _raceStartedUtc ??= DateTime.UtcNow;
+  }
+
+  private async Task UpdateProgressBarsFromRaceAsync()
+  {
+    try
+    {
+      var rivals = new List<double>();
+      double you = 0;
+      if (_isEasy && _easyRace is not null)
+      {
+        var ds = await _easyRace.GetCoveredDistancesAsync();
+        var u = ds.FirstOrDefault(d => d.IsUser);
+        you = Math.Clamp(u?.FractionOfRace ?? 0, 0, 1);
+      }
+      else if (!_isEasy && _mediumRace is not null)
+      {
+        var ds = await _mediumRace.GetCoveredDistancesAsync();
+        var u = ds.FirstOrDefault(d => d.IsUser);
+        you = Math.Clamp(u?.FractionOfRace ?? 0, 0, 1);
+        var foes = ds.Where(d => !d.IsUser).OrderBy(d => d.Idx).ToList();
+        var want = _quizRef?.GetFoeCount() ?? 5;
+        for (int i = 0; i < want; i++)
+        {
+          var f = (i < foes.Count) ? (foes[i].FractionOfRace ?? 0) : 0;
+          rivals.Add(Math.Clamp(f, 0, 1));
+        }
+      }
+      _quizRef?.SetExternalProgress(you, rivals);
+    }
+    catch { }
+  }
+
+  private void StartProgressPump()
+  {
+    try { StopProgressPump(); } catch { }
+    _progressPumpCts = new CancellationTokenSource();
+    var ct = _progressPumpCts.Token;
+    _ = Task.Run(async () =>
+    {
+      try
+      {
+        while (!ct.IsCancellationRequested)
+        {
+          if (_grandPrixFinished) break;
+          await InvokeAsync(UpdateProgressBarsFromRaceAsync);
+          await Task.Delay(500, ct);
+        }
+      }
+      catch (OperationCanceledException) { }
+      catch { }
+    }, ct);
+  }
+
+  private void StopProgressPump()
+  {
+    try { _progressPumpCts?.Cancel(); } catch { }
+    try { _progressPumpCts?.Dispose(); } catch { }
+    _progressPumpCts = null;
+  }
+
+  public void Dispose()
+  {
+    StopProgressPump();
   }
 }

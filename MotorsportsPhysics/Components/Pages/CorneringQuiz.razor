@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Forms
 @implements IDisposable
+@using System.Linq
 
 <PageTitle>Cornering Dynamics Quiz</PageTitle>
 
@@ -105,11 +106,14 @@ else
         <div class="space-y-2 mb-4">
           @for (int i = 0; i < foes.Length; i++)
           {
+            var label = (RivalLabels is not null && i < RivalLabels.Length && !string.IsNullOrWhiteSpace(RivalLabels[i]))
+              ? RivalLabels[i]
+              : $"Rival {i+1}";
             <div class="flex items-center gap-2">
               <div class="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
                 <div class="h-full bg-gray-500" style=@($"width:{Math.Round(foes[i]*100)}%")></div>
               </div>
-              <span class="text-xs text-gray-500">Rival @(@i+1)</span>
+              <span class="text-xs text-gray-500">@label</span>
             </div>
           }
         </div>
@@ -165,9 +169,11 @@ else
         }
         else
         {
-          <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider"
-                  @onclick="Next">
-            <span>@(current < questions.Count - 1 ? "Next" : "Finish")</span>
+          var isLast = current >= questions.Count - 1;
+          var canFinish = !RaceMode || !isLast || (userProgress >= 0.999 && foes.All(f => f >= 0.999));
+          <button class="w-full md:w-auto flex min-w-[120px] items-center justify-center rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wider disabled:opacity-50"
+                  disabled="@(!canFinish)" @onclick="Next">
+            <span>@(isLast ? "Finish" : "Next")</span>
           </button>
         }
       </div>
@@ -187,10 +193,21 @@ else
       }
       @if (RaceMode)
       {
-        var placement = 1 + foes.Count(f => f > userProgress);
-        <p class="mt-2 text-gray-800 font-medium">
-          Race result: @(placement == 1 ? "You won!" : $"You finished {placement} of {foes.Length + 1}")
-        </p>
+            if (_externalPlacement.HasValue)
+            {
+              var pos = _externalPlacement!.Value;
+              var tot = Math.Max(1, _externalTotalCars > 0 ? _externalTotalCars : foes.Length + 1);
+              <p class="mt-2 text-gray-800 font-medium">
+                Race result: @(pos == 1 ? "You won!" : $"You finished {pos} of {tot}")
+              </p>
+            }
+            else
+            {
+              var placement = 1 + foes.Count(f => f > userProgress);
+              <p class="mt-2 text-gray-800 font-medium">
+                Race result: @(placement == 1 ? "You won!" : $"You finished {placement} of {foes.Length + 1}")
+              </p>
+            }
       }
       <div class="mt-4 flex justify-center gap-3">
         <button class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50" @onclick="ResetAndStart">Try again</button>
@@ -229,11 +246,15 @@ else
   private DateTime? _finishedUtc;
   private TimeSpan? _elapsed;
   private bool _showElapsed = false;
+  private int? _externalPlacement;
+  private int _externalTotalCars = 0;
   private int timeLeft;
   private System.Timers.Timer? _timer;
   private double userProgress = 0; // 0..1
-  private double[] foes = new double[2] { 0, 0 };
-  private double[] foeBase = new double[2] { 0.9, 0.8 }; // relative pace per question step
+  [Parameter] public string[] RivalLabels { get; set; } = System.Array.Empty<string>();
+  // Five rivals' relative progress (0..1) and per-step base pace multipliers (matches Medium race cars)
+  private double[] foes = new double[5] { 0, 0, 0, 0, 0 };
+  private double[] foeBase = new double[5] { 0.95, 0.92, 0.90, 0.88, 0.85 }; // relative pace per question step
   private readonly Random _rng = new Random();
   // Tracks which question IDs have been explicitly submitted (via Check answer) in StepMode
   private HashSet<int> committed = new();
@@ -343,6 +364,8 @@ else
     submitted = false;
     answers.Clear();
     committed.Clear();
+    _externalPlacement = null;
+    _externalTotalCars = 0;
   }
 
   private void ResetAndStart()
@@ -354,7 +377,7 @@ else
     _startedUtc = DateTime.UtcNow;
     _finishedUtc = null;
     _elapsed = null;
-    userProgress = 0; foes[0] = foes[1] = 0; started = true;
+  userProgress = 0; for (int i = 0; i < foes.Length; i++) foes[i] = 0; started = true;
     if (Timed)
     {
       StartTimer();
@@ -458,6 +481,21 @@ else
     }
   }
 
+  // --- External race integration helpers ---
+  public int GetTotalSteps() => questions.Count;
+  public int GetFoeCount() => foes.Length;
+  private static double Clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+  public void SetExternalProgress(double youFraction, IReadOnlyList<double> rivalsFractions)
+  {
+    userProgress = Clamp01(youFraction);
+    for (int i = 0; i < foes.Length; i++)
+    {
+      var f = (i < rivalsFractions.Count) ? rivalsFractions[i] : 0.0;
+      foes[i] = Clamp01(f);
+    }
+    InvokeAsync(StateHasChanged);
+  }
+
   protected override void OnAfterRender(bool firstRender)
   {
     if (firstRender && StepMode && !started && AutoStart)
@@ -508,6 +546,14 @@ else
   {
     _elapsed = elapsed;
     _showElapsed = true;
+    InvokeAsync(StateHasChanged);
+  }
+
+  // Called by parent to set the authoritative final placement from the race engine
+  public void SetExternalPlacement(int position, int totalCars)
+  {
+    _externalPlacement = position;
+    _externalTotalCars = totalCars;
     InvokeAsync(StateHasChanged);
   }
 
