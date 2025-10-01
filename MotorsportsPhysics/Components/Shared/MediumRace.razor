@@ -1,11 +1,18 @@
 @using MotorsportsPhysics.Components.Shared
 
-<RaceTrack @ref="track" Class="mb-8" Title="Cornering Dynamics" PathTranslateX="50" AutoStart="false" QuestionAnswered="@QuestionAnswered" AnsweredCount="@AnsweredCount" OnLapChangedEvent="@OnLapChanged"
+<RaceTrack @ref="track" Class="mb-8" Title="Cornering Dynamics" AutoStart="false" QuestionAnswered="@QuestionAnswered" AnsweredCount="@AnsweredCount" OnLapChangedEvent="@OnLapChanged" GateByAnsweredCount="@GateByAnsweredCount"
   Cars="@(new RaceTrack.CarSprite[] {
-    new RaceTrack.CarSprite("images/car-yellow.png", 70, 40, 0.00),
-    new RaceTrack.CarSprite("images/car-blue.png",   70, 40, 0.20),
-    new RaceTrack.CarSprite("images/car-green.png",  70, 40, 0.40),
-    new RaceTrack.CarSprite("images/car-purple.png", 70, 40, 0.60)
+    // Offset along path, then fine X/Y grid deltas
+    // Offset along path (0..1), then GridDx and GridDy (in px) to fine-tune sprite placement
+    // Upper-lane cars (gridDy=0) must share EXACT same path coordinates; only offsets vary
+    new RaceTrack.CarSprite("images/car-yellow.png", 70, 40, 0.000, 0, 0),
+    new RaceTrack.CarSprite("images/car-blue.png",   70, 40, -0.025, 0, 0),
+    new RaceTrack.CarSprite("images/car-green.png",  70, 40, -0.050, 0, 0),
+    // Lower-lane cars: EXACT SAME TRAJECTORY among themselves; only start offsets differ.
+    // Use explicit Lane=2 and zero grid deltas so they share identical coordinates.
+    new RaceTrack.CarSprite("images/car-purple.png", 70, 40, -0.008, 0, 0, 2),
+    new RaceTrack.CarSprite("images/car-orange.png", 70, 40, -0.031, 0, 0, 2),
+    new RaceTrack.CarSprite("images/car-pink.png",   70, 40, -0.056, 0, 0, 2)
   })" />
 
 @code {
@@ -13,6 +20,15 @@
   [Parameter] public bool QuestionAnswered { get; set; } = false;
   [Parameter] public int AnsweredCount { get; set; } = 0;
   [Parameter] public EventCallback<int> OnLapChanged { get; set; }
+  // Medium mode: disable lap-to-question gating by default
+  [Parameter] public bool GateByAnsweredCount { get; set; } = false;
+
+  public async Task StartStepAsync(int step)
+  {
+    if (track is null) { await Task.CompletedTask; return; }
+    var laps = Math.Max(1, step); // visual progression only
+    await track.PlayLapsAsync(1, speed: null, haltOnFinish: false);
+  }
 
   public async Task StartAsync(double? targetSpeed = null)
   {
@@ -36,5 +52,41 @@
   {
     if (track is null) return;
     await track.ApplyPenaltyForNextLapAsync(multiplier);
+  }
+
+  public async Task<RaceTrack.RaceRank> GetUserRankAsync()
+  {
+    if (track is null) return new RaceTrack.RaceRank(1, 1);
+    return await track.GetUserRankAsync();
+  }
+
+  public async Task SetBaseSpeedAsync(double absolute)
+  {
+    if (track is null) return;
+    await track.SetBaseSpeedAsync(absolute);
+  }
+
+  public async Task<List<RaceTrack.CoveredDistance>> GetCoveredDistancesAsync()
+  {
+    if (track is null) return new List<RaceTrack.CoveredDistance>();
+    return await track.GetCoveredDistancesAsync();
+  }
+
+  public async Task SetTargetLapsAsync(int laps)
+  {
+    if (track is null) return;
+    await track.SetTargetLapsAsync(laps);
+  }
+
+  public async Task<List<RaceTrack.LapTelemetry>> GetLapTelemetryAsync()
+  {
+    if (track is null) return new List<RaceTrack.LapTelemetry>();
+    return await track.GetLapTelemetryAsync();
+  }
+
+  public async Task ResetLapTelemetryAsync()
+  {
+    if (track is null) return;
+    await track.ResetLapTelemetryAsync();
   }
 }

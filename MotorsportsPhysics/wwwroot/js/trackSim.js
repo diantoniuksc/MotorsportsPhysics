@@ -7,13 +7,14 @@
  */
 export function init(svgEl, opts = {}) {
   // DEBUG logging toggle
-  const DEBUG = true;
+  const DEBUG = false;
   const dlog = (...args) => { try { if (DEBUG) console.log('[trackSim]', ...args); } catch { /* ignore */ } };
-  // TEMP TEST: globally force a hard stop after the first lap even if playForLaps isn't called
-  const FORCE_FIRST_LAP_TEST = false;
-  let testTickerAttached = false;
+  // Internal test scaffolding removed for production
+  const FORCE_FIRST_LAP_TEST = false; // deprecated
+  let testTickerAttached = false; // deprecated
   const speed = opts.speed ?? 140; // px / s along path length
   const path = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath'));
+  const path2 = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath2'));
   if (!path) throw new Error('Missing #racePath in SVG');
   // Gather cars: prefer any elements with class .carSprite; fallback to legacy #carSprite if present
   const carNodeList = /** @type {NodeListOf<SVGImageElement>} */ (svgEl.querySelectorAll('.carSprite'));
@@ -23,6 +24,9 @@ export function init(svgEl, opts = {}) {
     if (legacy) cars.push(legacy);
   }
   if (cars.length === 0) throw new Error('No car sprites found (.carSprite or #carSprite)');
+  // Lane 2 (second path) screen-space Y offset in pixels. Cars using lane 2 and the visible path are both shifted by this.
+  // Can be overridden via opts.lane2YOffset; defaults to 20px as requested.
+  const lane2YOffset = Number(opts.lane2YOffset) || 23;
 
   let playing = false;
   // Base speed from app logic; effective speed may be reduced by penalty multiplier
@@ -31,10 +35,32 @@ export function init(svgEl, opts = {}) {
   let pxPerSec = pxPerSecBase * penaltyMul;
   let startTime = 0;
   let traveled = 0; // pixels along the path
+  // Absolute distance traveled accumulators (px) for progress reporting
+  let userAbsTraveled = 0; // user car
+  /** @type {Map<SVGImageElement, number>} */
+  const aiAbsTraveled = new Map(); // per-NPC absolute distance
+  // Per-lap telemetry storage; snapshot all cars each time the user crosses start/finish
+  /** @type {Array<{lap:number, elapsedMs:number, samples:Array<{idx:number,id:string,isUser:boolean,color:string,distancePx:number}>}>} */
+  const lapsTelemetry = [];
+  let raceStartMsGlobal = 0;
+  const extractColor = (imgEl) => {
+    try {
+      const href = imgEl.getAttribute('href') || '';
+      const m = href.match(/car-([a-zA-Z]+)/);
+      return m ? m[1].toLowerCase() : (imgEl.id || `car${(cars.indexOf(imgEl)+1)}`);
+    } catch { return imgEl.id || 'car'; }
+  };
   let rafId = 0;
   let startSampleTimer = 0; // timer id for sampling start position from the sprite
-  // Quiz gating: only allow halting when a question is NOT answered.
-  // Default false so first lap completion can pause awaiting an initial answer.
+  // Medium-only minimum speed floor (px/s): when gateByAnsweredCount is false (Medium),
+  // enforce an effective speed >= 70 after the car first reaches that speed during the initial ramp.
+  // Read directly from opts here to avoid referencing variables declared later.
+  const minSpeedFloor = (opts.gateByAnsweredCount === false) ? 70 : 0;
+  let floorArmed = false; // becomes true once pxPerSec reaches the floor once (avoids forcing ramp)
+  // Quiz gating: only allow halting when a question is NOT answered and gating is enabled.
+  // gateByAnsweredCount controls whether to pause when lapCounter > answeredCount (default true)
+  let gateByAnsweredCount = (opts.gateByAnsweredCount !== undefined) ? !!opts.gateByAnsweredCount : true;
+  // Default false so first lap completion can pause awaiting an initial answer (when gating is on).
   let questionAnswered = false;
   // Remember if we paused due to awaiting an answer, and what speed to restore on resume
   let pausedForQuestion = false;
@@ -45,6 +71,7 @@ export function init(svgEl, opts = {}) {
   let lapCounter = 0;
   // Penalty that lasts until the next completed lap (null when inactive)
   let penaltyUntilLap = null;
+  
   // Note: Speed remains constant across laps unless explicitly adjusted by app logic
   // Optional .NET listener for speed updates
   /** @type {any|null} */
@@ -88,6 +115,32 @@ export function init(svgEl, opts = {}) {
   /** @type {Set<(dt:number)=>boolean>} */
   const tickers = new Set(); // per-frame observers; return true to unregister
 
+  // Identify the user car (yellow): prefer element with id="carSprite", otherwise the first car
+  /** @type {SVGImageElement} */
+  const userCar = cars.find(c => c.id === 'carSprite') || cars[0];
+  // For non-user cars, keep an absolute speed (px/s) and a relative distance offset vs user (px)
+  /** @type {Map<SVGImageElement, number>} */
+  const aiAbsSpeed = new Map();
+  /** @type {Map<SVGImageElement, number>} */
+  const aiRelDist = new Map();
+  // Per-NPC per-lap boost configuration (px/s added after each completed user lap)
+  const aiLapBoostMin = Number(opts.aiLapBoostMin) || 15;
+  const aiLapBoostMax = Number(opts.aiLapBoostMax) || 25;
+  /** @type {Map<SVGImageElement, number>} */
+  const aiLapBoost = new Map();
+  // Initialize AI speeds to the current base speed and zero relative distance
+  for (const c of cars) {
+    if (c === userCar) continue;
+    aiAbsSpeed.set(c, pxPerSec);
+    aiRelDist.set(c, 0);
+    // Assign a per-car boost in [aiLapBoostMin, aiLapBoostMax]
+    const boost = aiLapBoostMin + Math.random() * Math.max(0, aiLapBoostMax - aiLapBoostMin);
+    aiLapBoost.set(c, boost);
+    aiAbsTraveled.set(c, 0);
+  }
+  // Track the planned number of laps when playForLaps is used (0 means unknown/open)
+  let targetLapsGlobal = 0;
+
   // transform applied to the path (applied as an SVG transform on the path element)
   let tx = 0, ty = 0, s = 1;
   const mapPoint = (pt) => ({ x: pt.x * s + tx, y: pt.y * s + ty });
@@ -104,6 +157,7 @@ export function init(svgEl, opts = {}) {
   const sizeMap = new Map();
 
   const total = path.getTotalLength();
+  const total2 = path2 ? path2.getTotalLength() : total;
   // optional starting offset fraction along the path (-1..1). Positive goes forward; negative earlier/back.
   let startOffsetFrac = Number(opts.startOffsetFrac);
   if (!Number.isFinite(startOffsetFrac)) startOffsetFrac = 0;
@@ -147,7 +201,7 @@ export function init(svgEl, opts = {}) {
     dlog('startXY', { startX: Number(startX.toFixed(2)), startY: Number(startY.toFixed(2)), startLen: Number(startLen.toFixed(2)) });
     updateStartMarker();
   }
-  dlog('init', { speed, rotationOffset, angleAlpha, total, startOffsetFrac });
+  dlog('init', { speed, rotationOffset, angleAlpha, total, startOffsetFrac, lane2YOffset });
 
   // Throttled per-frame debug
   let stepLogAccum = 0;
@@ -157,10 +211,31 @@ export function init(svgEl, opts = {}) {
     if (!startTime) startTime = ts;
     const dt = (ts - startTime) / 1000; // s
     startTime = ts;
+    // Arm min-speed floor once we naturally reach it (avoid affecting the start ramp)
+    if (!floorArmed && minSpeedFloor > 0 && pxPerSec >= minSpeedFloor - 0.5) {
+      floorArmed = true;
+      dlog('minFloor:armed', { floor: minSpeedFloor, pxPerSec: Number(pxPerSec.toFixed(2)) });
+    }
+    // Enforce floor while playing after it’s armed
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     // move backwards by default so the car runs anticlockwise
     traveled = traveled - pxPerSec * dt;
     // normalize into [0, total)
     traveled = ((traveled % total) + total) % total;
+    // accumulate absolute distance traveled for the user (non-negative)
+    if (pxPerSec > 0) userAbsTraveled += pxPerSec * dt;
+    // Update AI relative distances so their absolute speeds do not depend on the user's answers
+    if (cars.length > 1) {
+      for (const c of cars) {
+        if (c === userCar) continue;
+        const vAbs = aiAbsSpeed.get(c) || 0; // px/s, absolute for this AI car
+        const vRel = vAbs - pxPerSec;        // relative to user's current speed
+        if (vRel !== 0) aiRelDist.set(c, (aiRelDist.get(c) || 0) + vRel * dt);
+        if (vAbs > 0) aiAbsTraveled.set(c, (aiAbsTraveled.get(c) || 0) + vAbs * dt);
+      }
+    }
     render(traveled);
     // Throttled state log (≈2x per second)
     stepLogAccum += dt;
@@ -183,10 +258,11 @@ export function init(svgEl, opts = {}) {
 
   function render(lenBase) {
     const delta = 0.1;
-    cars.forEach((carEl) => {
+  cars.forEach((carEl) => {
       // offset per car through data-offset in [0..1) fraction of total length
       const offsetFrac = Number(carEl.getAttribute('data-offset') || 0);
-      const len = ((lenBase - offsetFrac * total) % total + total) % total;
+  const extra = (carEl === userCar) ? 0 : (aiRelDist.get(carEl) || 0);
+  const len = ((lenBase - offsetFrac * total - extra) % total + total) % total;
       // size
       let sz = sizeMap.get(carEl);
       if (!sz) {
@@ -196,13 +272,32 @@ export function init(svgEl, opts = {}) {
         };
         sizeMap.set(carEl, sz);
       }
-      // position and tangent
-      const p = path.getPointAtLength(len);
-      const p2 = path.getPointAtLength((len - delta + total) % total);
-      const mappedX = p.x * s + tx;
-      const mappedY = p.y * s + ty;
-      const mappedPx2X = p2.x * s + tx;
-      const mappedPx2Y = p2.y * s + ty;
+  // Decide lane by grid-dy (or explicit data-lane). We no longer use dy==0 to suppress dx/dy adjustments.
+  const dyRaw = Number(carEl.getAttribute('data-grid-dy') || 0) || 0;
+  const isBaseGroup = Math.abs(dyRaw) < 1e-6;
+  // Prefer explicit data-lane when provided; otherwise fallback to dy-based grouping
+  const hasLane = carEl.hasAttribute('data-lane');
+  const laneVal = hasLane ? Number(carEl.getAttribute('data-lane') || 1) : 1;
+  const useLane2 = hasLane ? (laneVal === 2 && !!path2) : (!isBaseGroup && !!path2);
+  // Use the actual geometry of the selected lane's path
+  const samplePath = (useLane2 && path2) ? path2 : path;
+  const sampleTotal = (samplePath === path2 && path2) ? total2 : total;
+  const lenNorm = len / total; // 0..1 in main path domain
+  // Sample along the same fraction of the selected lane's total length
+  const laneLen = lenNorm * sampleTotal;
+  const lenPrevMain = ((((len - delta) % total) + total) % total);
+  const laneLenPrev = (lenPrevMain / total) * sampleTotal;
+    const p = samplePath.getPointAtLength(laneLen);
+    const p2 = samplePath.getPointAtLength(laneLenPrev);
+  let mappedX = p.x * s + tx;
+  let mappedY = p.y * s + ty;
+  let mappedPx2X = p2.x * s + tx;
+  let mappedPx2Y = p2.y * s + ty;
+      // Apply lane-2 specific offset to screen-space mapping so cars follow the visually shifted path
+      if (samplePath === path2) {
+        mappedY += lane2YOffset;
+        mappedPx2Y += lane2YOffset;
+      }
       const targetAngleDeg = Math.atan2(mappedPx2Y - mappedY, mappedPx2X - mappedX) * 180 / Math.PI;
       let prev = prevAngleDegMap.get(carEl);
       if (prev === undefined) prev = targetAngleDeg;
@@ -211,11 +306,19 @@ export function init(svgEl, opts = {}) {
       prevAngleDegMap.set(carEl, smoothedAngleDeg);
       const finalAngle = smoothedAngleDeg + rotationOffset;
       // center and rotate
-      const x = mappedX - sz.w / 2;
-      const y = mappedY - sz.h / 2;
-      carEl.setAttribute('x', x.toFixed(2));
-      carEl.setAttribute('y', y.toFixed(2));
-      carEl.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${mappedX.toFixed(2)} ${mappedY.toFixed(2)})`);
+  // Optional per-car deltas for fine tuning (apply to both position and rotation pivot)
+  // Support multiple attribute names for convenience: data-grid-dx/dy, data-dx/dy, dx/dy
+  const dxAttr = carEl.getAttribute('data-grid-dx') ?? carEl.getAttribute('data-dx') ?? carEl.getAttribute('dx') ?? '0';
+  const dyAttr = carEl.getAttribute('data-grid-dy') ?? carEl.getAttribute('data-dy') ?? carEl.getAttribute('dy') ?? '0';
+  const dxAdj = Number(dxAttr) || 0;
+  const dyAdj = Number(dyAttr) || 0;
+  const adjX = mappedX + dxAdj;
+  const adjY = mappedY + dyAdj;
+  const x = adjX - sz.w / 2;
+  const y = adjY - sz.h / 2;
+  carEl.setAttribute('x', x.toFixed(2));
+  carEl.setAttribute('y', y.toFixed(2));
+  carEl.setAttribute('transform', `rotate(${finalAngle.toFixed(2)} ${adjX.toFixed(2)} ${adjY.toFixed(2)})`);
     });
   }
 
@@ -225,6 +328,7 @@ export function init(svgEl, opts = {}) {
     startTime = 0;
     dlog('play');
     let playStartMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (!raceStartMsGlobal) raceStartMsGlobal = playStartMs;
     // Sample the absolute car position ~1s after play starts (while speed is still 0 due to start delay)
     // This captures the true start center without caring about scale/translation math.
     const SPEED_EPS = 0.1; // px/s
@@ -306,6 +410,28 @@ export function init(svgEl, opts = {}) {
           dlog('start-return', { dist: Number(dist.toFixed(2)), lap: lapCounter, answeredCount });
           try { emitSpeed(true); } catch {}
           try { emitLap(true); } catch {}
+          // Snapshot telemetry for all cars at this lap crossing
+          try {
+            const elapsedMs = Math.max(0, nowMs - (raceStartMsGlobal || nowMs));
+            const samples = cars.map((c, idx) => {
+              const isUser = (c === userCar);
+              const distancePx = isUser ? userAbsTraveled : (aiAbsTraveled.get(c) || 0);
+              return { idx, id: c.id || '', isUser, color: extractColor(c), distancePx };
+            });
+            lapsTelemetry.push({ lap: lapCounter, elapsedMs, samples });
+          } catch { /* ignore */ }
+          // AI: after each completed user lap, give all non-user cars their per-car absolute speed boost
+          try {
+            const applied = [];
+            for (const c of cars) {
+              if (c === userCar) continue;
+              const cur = aiAbsSpeed.get(c) || 0;
+              const inc = aiLapBoost.get(c) ?? (aiLapBoostMin + Math.random() * Math.max(0, aiLapBoostMax - aiLapBoostMin));
+              aiAbsSpeed.set(c, cur + inc);
+              applied.push({ idx: cars.indexOf(c), inc: Number(inc.toFixed(1)) });
+            }
+            dlog('ai:lapBoost', { lap: lapCounter, applied });
+          } catch { /* ignore */ }
           // If a lap-long penalty was set, and we've reached or passed the target lap, clear it now
           if (penaltyUntilLap !== null && lapCounter >= penaltyUntilLap) {
             penaltyUntilLap = null;
@@ -315,8 +441,8 @@ export function init(svgEl, opts = {}) {
             emitSpeed(true);
           }
           lastReportMs = nowMs;
-          // Gate: if user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
-          if (answeredCount < lapCounter) {
+          // Gate: if enabled and user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
+          if (gateByAnsweredCount && answeredCount < lapCounter) {
             // Snap to the exact start point, then stop
             try { traveled = startLen; render(traveled); } catch {}
             try { setSpeed(0); } catch {}
@@ -352,7 +478,14 @@ export function init(svgEl, opts = {}) {
   function reset() {
     pause();
     traveled = 0;
+    userAbsTraveled = 0;
+    try {
+      aiAbsTraveled.clear();
+      for (const c of cars) { if (c !== userCar) aiAbsTraveled.set(c, 0); }
+    } catch {}
     lapCounter = 0;
+    lapsTelemetry.length = 0;
+    raceStartMsGlobal = 0;
     if (startOffsetFrac !== 0) {
       traveled = (traveled + startOffsetFrac * total) % total;
       if (traveled < 0) traveled += total;
@@ -369,6 +502,10 @@ export function init(svgEl, opts = {}) {
     // Allow 0 to keep the car stationary; negative values treated as 0
     pxPerSecBase = Math.max(0, n);
     pxPerSec = pxPerSecBase * penaltyMul;
+    // Apply floor if armed (Medium only) but do not arm here
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
     dlog('setSpeed', { input: v, base: pxPerSecBase, penaltyMul, pxPerSec });
     // Force immediate emit when transitioning to zero so UI reflects a stop even within throttle window
@@ -380,6 +517,9 @@ export function init(svgEl, opts = {}) {
     const d = Math.max(0, Number(durationMs) || 0);
     penaltyMul = m;
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     dlog('applyPenalty', { multiplier: penaltyMul, durationMs: d, base: pxPerSecBase, pxPerSec });
     emitSpeed(true);
     if (d > 0) {
@@ -397,6 +537,9 @@ export function init(svgEl, opts = {}) {
     const m = Math.max(0, Math.min(1, Number(multiplier)));
     penaltyMul = m;
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     penaltyUntilLap = (lapCounter || 0) + 1; // clear when lapCounter reaches this value
     dlog('applyPenaltyForNextLap', { multiplier: penaltyMul, clearAtLap: penaltyUntilLap, base: pxPerSecBase, pxPerSec });
     emitSpeed(true);
@@ -405,8 +548,10 @@ export function init(svgEl, opts = {}) {
     tx = Number(txNew) || 0;
     ty = Number(tyNew) || 0;
     s = Number(sNew) || 1;
-    // apply to path element so the visible guide moves
-    path.setAttribute('transform', `translate(${tx} ${ty}) scale(${s})`);
+  // apply to path elements so the visible guides move (both lanes share the same transform)
+  if (path) path.setAttribute('transform', `translate(${tx} ${ty}) scale(${s})`);
+  // For path2, append an extra translate AFTER scale so the 20px is in screen space (not scaled)
+  if (path2) path2.setAttribute('transform', `translate(${tx} ${ty}) scale(${s}) translate(0 ${lane2YOffset})`);
     // re-render current position so the car updates immediately
     render(traveled);
     dlog('setTransform', { tx, ty, s });
@@ -425,6 +570,9 @@ export function init(svgEl, opts = {}) {
     const before = pxPerSecBase;
     pxPerSecBase = Math.max(0, pxPerSecBase + d);
     pxPerSec = pxPerSecBase * penaltyMul;
+    if (floorArmed && minSpeedFloor > 0 && pxPerSec < minSpeedFloor) {
+      pxPerSec = minSpeedFloor;
+    }
     if (pxPerSec > 0) lastNonZeroSpeed = pxPerSec;
     dlog('adjustBaseSpeed', { before, delta: d, base: pxPerSecBase, penaltyMul, pxPerSec });
     emitSpeed(true);
@@ -434,10 +582,14 @@ export function init(svgEl, opts = {}) {
     // TEMP TEST: also force stopping after the first lap here to mirror behavior
     if (FORCE_FIRST_LAP_TEST) targetLaps = 1;
     if (targetLaps === 0) return Promise.resolve();
+    // Do not override an externally defined target laps (e.g., quiz total). Only set if unset or lower.
+    if (!targetLapsGlobal || targetLapsGlobal < targetLaps) {
+      targetLapsGlobal = targetLaps;
+    }
     // Ensure running; do NOT force speed here so callers can apply their own delay/ramp
     play();
     // Count wraps of the start line instead of integrating distance to ensure precise stop
-  let lapsDone = 0;
+      // Keep cumulative progress across calls; do not reset distances or lap counter here
   let lastShift = shifted(traveled);
   let accumDist = 0; // px traveled irrespective of wraps
     // Hysteresis around start position to avoid multi-counting
@@ -479,7 +631,7 @@ export function init(svgEl, opts = {}) {
         lastShift = curShift;
         const targetDist = targetLaps * total;
         if (lapsDone >= targetLaps || accumDist >= targetDist) {
-          if (haltOnFinish && !questionAnswered) {
+          if (haltOnFinish && (!questionAnswered && gateByAnsweredCount)) {
             dlog('halt', { reason: lapsDone >= targetLaps ? 'wraps' : 'distance-fallback', lapsDone, targetLaps, accumDist: Number(accumDist.toFixed(1)), targetDist: Number(targetDist.toFixed(1)) });
             // Snap to exact start for a perfect visual stop
             try { traveled = startLen; render(traveled); } catch {}
@@ -495,6 +647,47 @@ export function init(svgEl, opts = {}) {
       };
       tickers.add(ticker);
     });
+  }
+  // Allow host to define the planned total laps for progress fractions without altering play state
+  function setTargetLaps(n) {
+    const t = Math.max(0, Number(n) || 0);
+    targetLapsGlobal = t;
+    dlog('setTargetLaps', { targetLapsGlobal });
+  }
+  // Get per-lap telemetry snapshots collected at user start/finish crossings
+  function getLapTelemetry() {
+    return lapsTelemetry.slice();
+  }
+  // Clear collected lap telemetry and restart timing baseline
+  function resetLapTelemetry() {
+    try {
+      lapsTelemetry.length = 0;
+      raceStartMsGlobal = 0;
+      dlog('resetLapTelemetry');
+    } catch { }
+  }
+  // Report covered distances for all cars
+  function getCoveredDistances() {
+    /** @type {Array<{idx:number,id:string,isUser:boolean,distancePx:number,fractionOfRace:number|null}>} */
+    const res = [];
+    const getLaneTotal = (el) => {
+      const hasLane = el.hasAttribute('data-lane');
+      const laneVal = hasLane ? Number(el.getAttribute('data-lane') || 1) : 1;
+      const useLane2 = hasLane ? (laneVal === 2 && !!path2) : false;
+      return useLane2 && path2 ? total2 : total;
+    };
+    const targetPxPerCar = (el) => {
+      if (!targetLapsGlobal || targetLapsGlobal <= 0) return null;
+      return targetLapsGlobal * getLaneTotal(el);
+    };
+    cars.forEach((c, idx) => {
+      const isUser = (c === userCar);
+      const dist = isUser ? userAbsTraveled : (aiAbsTraveled.get(c) || 0);
+      const tp = targetPxPerCar(c);
+      const frac = tp ? Math.max(0, Math.min(1, dist / tp)) : null;
+      res.push({ idx, id: c.id || '', isUser, distancePx: dist, fractionOfRace: frac });
+    });
+    return res;
   }
   function setQuestionAnswered(v) {
     questionAnswered = !!v;
@@ -512,7 +705,17 @@ export function init(svgEl, opts = {}) {
     answeredCount = Math.max(0, Number(n) || 0);
     dlog('setAnsweredCount', { answeredCount, prev, lapCounter, pausedForQuestion });
     // If we paused awaiting answers and the threshold is now satisfied, resume
-    if (pausedForQuestion && answeredCount >= lapCounter) {
+    if (gateByAnsweredCount && pausedForQuestion && answeredCount >= lapCounter) {
+      try { play(); } catch { }
+      try { if (pxPerSec === 0 && lastNonZeroSpeed > 0) setSpeed(lastNonZeroSpeed); } catch { }
+      pausedForQuestion = false;
+    }
+  }
+  function setGateByAnsweredCount(v) {
+    gateByAnsweredCount = !!v;
+    dlog('setGateByAnsweredCount', { gateByAnsweredCount });
+    // If gating just got disabled and we were paused for a question, resume immediately
+    if (!gateByAnsweredCount && pausedForQuestion) {
       try { play(); } catch { }
       try { if (pxPerSec === 0 && lastNonZeroSpeed > 0) setSpeed(lastNonZeroSpeed); } catch { }
       pausedForQuestion = false;
@@ -529,8 +732,34 @@ export function init(svgEl, opts = {}) {
     dlog('dispose');
   }
 
+  // Compute the user's current race position among all cars (1-based)
+  function getUserRank() {
+    try {
+      const lenBase = traveled;
+      const items = cars.map((carEl, idx) => {
+        const offsetFrac = Number(carEl.getAttribute('data-offset') || 0);
+        const extra = (carEl === userCar) ? 0 : (aiRelDist.get(carEl) || 0);
+        const len = ((lenBase - offsetFrac * total - extra) % total + total) % total;
+        return { el: carEl, idx, len };
+      });
+      const userItem = items.find(i => i.el === userCar);
+      const userLen = userItem ? userItem.len : 0;
+      let aheadCount = 0;
+      for (const it of items) {
+        if (it.el === userCar) continue;
+        const ahead = ((userLen - it.len + total) % total);
+        // If ahead in the current direction and within half a lap, consider it in front
+        if (ahead > 1e-6 && ahead < total / 2) aheadCount++;
+      }
+      const position = aheadCount + 1;
+      return { position, totalCars: cars.length };
+    } catch {
+      return { position: 1, totalCars: cars.length };
+    }
+  }
+
   // Initial render to place the car at the path start (with optional offset)
   render(traveled);
 
-  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, adjustBaseSpeed, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, registerSpeedListener, unregisterSpeedListener, registerLapListener, unregisterLapListener, applyPenalty, applyPenaltyForNextLap };
+  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, adjustBaseSpeed, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, setGateByAnsweredCount, registerSpeedListener, unregisterSpeedListener, registerLapListener, unregisterLapListener, applyPenalty, applyPenaltyForNextLap, getUserRank, getCoveredDistances, setTargetLaps, getLapTelemetry, resetLapTelemetry };
 }
