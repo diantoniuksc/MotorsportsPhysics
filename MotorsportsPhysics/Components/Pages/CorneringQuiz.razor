@@ -600,7 +600,6 @@ else
     // Select questions based on difficulty; default to Easy for unknown values.
     var d = (Difficulty ?? "Easy").Trim();
     var isMedium = d.Equals("Medium", StringComparison.OrdinalIgnoreCase);
-    var isEasy = d.Equals("Easy", StringComparison.OrdinalIgnoreCase);
     // High currently uses Easy questions unless a separate set is added later
     questions = isMedium ? _mediumQuestions : _easyQuestions;
     base.OnParametersSet();

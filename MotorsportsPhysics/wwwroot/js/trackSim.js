@@ -7,11 +7,11 @@
  */
 export function init(svgEl, opts = {}) {
   // DEBUG logging toggle
-  const DEBUG = true;
+  const DEBUG = false;
   const dlog = (...args) => { try { if (DEBUG) console.log('[trackSim]', ...args); } catch { /* ignore */ } };
-  // TEMP TEST: globally force a hard stop after the first lap even if playForLaps isn't called
-  const FORCE_FIRST_LAP_TEST = false;
-  let testTickerAttached = false;
+  // Internal test scaffolding removed for production
+  const FORCE_FIRST_LAP_TEST = false; // deprecated
+  let testTickerAttached = false; // deprecated
   const speed = opts.speed ?? 140; // px / s along path length
   const path = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath'));
   const path2 = /** @type {SVGPathElement} */ (svgEl.querySelector('#racePath2'));
