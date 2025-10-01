@@ -224,6 +224,8 @@ else
   [Parameter] public bool ShowExplanation { get; set; } = true;
   [Parameter] public bool RaceMode { get; set; } = false;
   [Parameter] public bool Timed { get; set; } = false;
+  // Difficulty label passed by parent (e.g., "Easy", "Medium", "High"). Default Easy.
+  [Parameter] public string Difficulty { get; set; } = "Easy";
   // When true (default), the quiz in StepMode will auto-start on first render.
   // Set to false to defer starting until the parent explicitly calls StartFromParent().
   [Parameter] public bool AutoStart { get; set; } = true;
@@ -259,7 +261,11 @@ else
   // Tracks which question IDs have been explicitly submitted (via Check answer) in StepMode
   private HashSet<int> committed = new();
 
-  private readonly List<Question> questions = new()
+  // The active list of questions for the current difficulty
+  private List<Question> questions = new();
+
+  // Easy (and default) question set
+  private readonly List<Question> _easyQuestions = new()
   {
     new(1, "What is the difference between understeer and oversteer?",
       new() {
@@ -311,6 +317,90 @@ else
     new(10, "Why do racing drivers take a “racing line” through corners?",
       new() { "A) To make the corner longer, reducing sharpness", "B) To stay closer to the audience", "C) To save tire life", "D) To reduce the need for braking completely" }, 0,
       explanationHtml: "A wider radius reduces required lateral acceleration (m v^2 / r), enabling higher corner speed and stability."),
+  };
+
+  // Medium question set (user-provided list)
+  private readonly List<Question> _mediumQuestions = new()
+  {
+    new(1, "What does the term \"slip angle\" describe in cornering?",
+      new() {
+        "A) The angle between the car’s direction of travel and the steering wheel position",
+        "B) The angle between the tire’s actual path and its pointing direction",
+        "C) The angle of the car’s roll while cornering",
+        "D) The maximum angle a car can turn before skidding"
+      }, 1),
+
+    new(2, "What happens when a driver enters a corner too fast?",
+      new() {
+        "A) The car always spins",
+        "B) The car tends to understeer or oversteer, depending on grip",
+        "C) The car automatically stabilizes due to inertia",
+        "D) The tires gain more grip"
+      }, 1),
+
+    new(3, "Why is the apex important when taking a racing corner?",
+      new() {
+        "A) It is the point where braking starts",
+        "B) It minimizes the steering input needed",
+        "C) It reduces engine wear",
+        "D)  It is the point closest to the inside of the corner that helps optimize speed"
+      }, 3),
+
+    new(4, "What is trail braking in racing?",
+      new() {
+        "A) Braking only before the corner",
+        "B) Braking throughout the entire straight",
+        "C) Gradually releasing the brake while entering the corner",
+        "D) Using the handbrake to initiate cornering"
+      }, 2),
+
+    new(5, "Which of these factors increases cornering grip?",
+      new() {
+        "A) Increased aerodynamic downforce",
+        "B) Lower car mass",
+        "C)  Higher tire pressure",
+        "D) Shorter wheelbase"
+      }, 0),
+
+    new(6, "What happens to lateral acceleration when corner radius decreases but speed stays the same?",
+      new() {
+        "A) It decreases",
+        "B) It increases",
+        "C) It stays the same",
+        "D) It becomes zero"
+      }, 1),
+
+    new(7, "What role does camber angle play in cornering?",
+      new() {
+        "A) It affects tire temperature",
+        "B) It reduces braking distance",
+        "C) It optimizes tire contact patch for better grip",
+        "D) It increases aerodynamic drag"
+      }, 2),
+
+    new(8, "Why do cars lean outward during a turn?",
+      new() {
+        "A) Due to aerodynamic forces",
+        "B) Due to centrifugal effect (inertia)",
+        "C) Due to reduced tire pressure",
+        "D) Due to suspension stiffness"
+      }, 1),
+
+    new(9, "Which cornering technique helps maintain maximum speed through a curve?",
+      new() {
+        "A) Braking late and accelerating early",
+        "B) Taking a wide entry, hitting the apex, and wide exit",
+        "C) Steering sharply into the corner",
+        "D) Reducing steering angle completely"
+      }, 1),
+
+    new(10, "Why is tire load sensitivity important in cornering?",
+      new() {
+        "A) Because tires generate more grip as load increases, but not proportionally",
+        "B) Because tires lose grip with increased load",
+        "C) Because load has no effect on grip",
+        "D) Because load sensitivity only applies to braking"
+      }, 0),
   };
 
   private void Select(int id, int optionIndex)
@@ -503,6 +593,17 @@ else
       ResetAndStart();
     }
     base.OnAfterRender(firstRender);
+  }
+
+  protected override void OnParametersSet()
+  {
+    // Select questions based on difficulty; default to Easy for unknown values.
+    var d = (Difficulty ?? "Easy").Trim();
+    var isMedium = d.Equals("Medium", StringComparison.OrdinalIgnoreCase);
+    var isEasy = d.Equals("Easy", StringComparison.OrdinalIgnoreCase);
+    // High currently uses Easy questions unless a separate set is added later
+    questions = isMedium ? _mediumQuestions : _easyQuestions;
+    base.OnParametersSet();
   }
 
   public void Dispose()
