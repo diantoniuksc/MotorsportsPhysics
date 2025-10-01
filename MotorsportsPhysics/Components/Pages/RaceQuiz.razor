@@ -26,11 +26,11 @@ else
       {
         @if (_isEasy)
         {
-          <EasyRace @ref="_easyRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" />
+          <EasyRace @ref="_easyRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="true" />
         }
         else
         {
-          <MediumRace @ref="_mediumRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" />
+          <MediumRace @ref="_mediumRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="false" />
         }
       }
   <CorneringQuiz @ref="_quizRef" StepMode="true" AutoStart="false" OnFinished="OnQuizFinished"

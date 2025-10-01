@@ -52,8 +52,10 @@ export function init(svgEl, opts = {}) {
   };
   let rafId = 0;
   let startSampleTimer = 0; // timer id for sampling start position from the sprite
-  // Quiz gating: only allow halting when a question is NOT answered.
-  // Default false so first lap completion can pause awaiting an initial answer.
+  // Quiz gating: only allow halting when a question is NOT answered and gating is enabled.
+  // gateByAnsweredCount controls whether to pause when lapCounter > answeredCount (default true)
+  let gateByAnsweredCount = (opts.gateByAnsweredCount !== undefined) ? !!opts.gateByAnsweredCount : true;
+  // Default false so first lap completion can pause awaiting an initial answer (when gating is on).
   let questionAnswered = false;
   // Remember if we paused due to awaiting an answer, and what speed to restore on resume
   let pausedForQuestion = false;
@@ -425,8 +427,8 @@ export function init(svgEl, opts = {}) {
             emitSpeed(true);
           }
           lastReportMs = nowMs;
-          // Gate: if user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
-          if (answeredCount < lapCounter) {
+          // Gate: if enabled and user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
+          if (gateByAnsweredCount && answeredCount < lapCounter) {
             // Snap to the exact start point, then stop
             try { traveled = startLen; render(traveled); } catch {}
             try { setSpeed(0); } catch {}
@@ -602,7 +604,7 @@ export function init(svgEl, opts = {}) {
         lastShift = curShift;
         const targetDist = targetLaps * total;
         if (lapsDone >= targetLaps || accumDist >= targetDist) {
-          if (haltOnFinish && !questionAnswered) {
+          if (haltOnFinish && (!questionAnswered && gateByAnsweredCount)) {
             dlog('halt', { reason: lapsDone >= targetLaps ? 'wraps' : 'distance-fallback', lapsDone, targetLaps, accumDist: Number(accumDist.toFixed(1)), targetDist: Number(targetDist.toFixed(1)) });
             // Snap to exact start for a perfect visual stop
             try { traveled = startLen; render(traveled); } catch {}
@@ -676,7 +678,17 @@ export function init(svgEl, opts = {}) {
     answeredCount = Math.max(0, Number(n) || 0);
     dlog('setAnsweredCount', { answeredCount, prev, lapCounter, pausedForQuestion });
     // If we paused awaiting answers and the threshold is now satisfied, resume
-    if (pausedForQuestion && answeredCount >= lapCounter) {
+    if (gateByAnsweredCount && pausedForQuestion && answeredCount >= lapCounter) {
+      try { play(); } catch { }
+      try { if (pxPerSec === 0 && lastNonZeroSpeed > 0) setSpeed(lastNonZeroSpeed); } catch { }
+      pausedForQuestion = false;
+    }
+  }
+  function setGateByAnsweredCount(v) {
+    gateByAnsweredCount = !!v;
+    dlog('setGateByAnsweredCount', { gateByAnsweredCount });
+    // If gating just got disabled and we were paused for a question, resume immediately
+    if (!gateByAnsweredCount && pausedForQuestion) {
       try { play(); } catch { }
       try { if (pxPerSec === 0 && lastNonZeroSpeed > 0) setSpeed(lastNonZeroSpeed); } catch { }
       pausedForQuestion = false;
@@ -722,5 +734,5 @@ export function init(svgEl, opts = {}) {
   // Initial render to place the car at the path start (with optional offset)
   render(traveled);
 
-  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, adjustBaseSpeed, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, registerSpeedListener, unregisterSpeedListener, registerLapListener, unregisterLapListener, applyPenalty, applyPenaltyForNextLap, getUserRank, getCoveredDistances, setTargetLaps, getLapTelemetry, resetLapTelemetry };
+  return { play, pause, setSpeed, reset, dispose, setTransform, setRotation, adjustBaseSpeed, playForLaps, setQuestionAnswered, getQuestionAnswered, setAnsweredCount, setGateByAnsweredCount, registerSpeedListener, unregisterSpeedListener, registerLapListener, unregisterLapListener, applyPenalty, applyPenaltyForNextLap, getUserRank, getCoveredDistances, setTargetLaps, getLapTelemetry, resetLapTelemetry };
 }

@@ -1,6 +1,6 @@
 @using MotorsportsPhysics.Components.Shared
 
-<RaceTrack @ref="track" Class="mb-8" Title="Cornering Dynamics" AutoStart="false" ShowPath="true" QuestionAnswered="@QuestionAnswered" AnsweredCount="@AnsweredCount" OnLapChangedEvent="@OnLapChanged"
+<RaceTrack @ref="track" Class="mb-8" Title="Cornering Dynamics" AutoStart="false" ShowPath="true" QuestionAnswered="@QuestionAnswered" AnsweredCount="@AnsweredCount" OnLapChangedEvent="@OnLapChanged" GateByAnsweredCount="@GateByAnsweredCount"
   Cars="@(new RaceTrack.CarSprite[] {
     // Offset along path, then fine X/Y grid deltas
     // Offset along path (0..1), then GridDx and GridDy (in px) to fine-tune sprite placement
@@ -20,6 +20,8 @@
   [Parameter] public bool QuestionAnswered { get; set; } = false;
   [Parameter] public int AnsweredCount { get; set; } = 0;
   [Parameter] public EventCallback<int> OnLapChanged { get; set; }
+  // Medium mode: disable lap-to-question gating by default
+  [Parameter] public bool GateByAnsweredCount { get; set; } = false;
 
   public async Task StartStepAsync(int step)
   {
