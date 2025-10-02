@@ -26,11 +26,11 @@ else
       {
         @if (_isEasy)
         {
-          <EasyRace @ref="_easyRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="true" />
+          <EasyRace @ref="_easyRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="@_gateByAnsweredCount" />
         }
         else
         {
-          <MediumRace @ref="_mediumRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="false" />
+          <MediumRace @ref="_mediumRace" QuestionAnswered="@_questionAnswered" AnsweredCount="@_answeredCount" OnLapChanged="OnLapChanged" GateByAnsweredCount="@_gateByAnsweredCount" />
         }
       }
   <CorneringQuiz @ref="_quizRef" StepMode="true" AutoStart="false" OnFinished="OnQuizFinished"
@@ -39,6 +39,7 @@ else
                    Timed="@_timed"
                    TimeLimitSeconds="@_timeLimit"
                    Difficulty="@_label"
+                   Topic="@_topic"
                    RivalLabels="@_rivalLabels"
                    OnStepStarted="OnStepStarted"
                    OnAnswerStateChanged="OnAnswerStateChanged"
@@ -61,8 +62,8 @@ else
           else if (string.Equals(_label, "Medium", StringComparison.OrdinalIgnoreCase))
           {
             <ul class="list-disc pl-5 text-gray-800 space-y-2 mb-4">
-              <li>Race five rivals. Explanations are on. No timer.</li>
-              <li>Your car keeps moving even if you haven’t answered yet.</li>
+              <li>Race five rivals as the yellow car. Explanations are on. No timer.</li>
+              <li>Your yellow car keeps moving even if you haven’t answered yet.</li>
               <li>Answer correctly to boost your pace; wrong answers cause a brief slowdown.</li>
               <li>Complete all questions. Your final placing is shown at the end.</li>
             </ul>
@@ -70,8 +71,9 @@ else
           else
           {
             <ul class="list-disc pl-5 text-gray-800 space-y-2 mb-4">
-              <li>Race rivals with a countdown. Explanations are off.</li>
+              <li>Race five rivals as the yellow car with a countdown. Explanations are off.</li>
               <li>Answer quickly — correct answers improve your pace; wrong answers slow you briefly.</li>
+              <li>If question n isn’t answered by the n-th lap, your yellow car stops at the start/finish. Rivals continue.</li>
               <li>Finish all questions before time runs out.</li>
             </ul>
           }
@@ -111,6 +113,9 @@ else
   private int _timeLimit = 90;
   private string _label = "";
   private bool _isEasy = false;
+    // Controls whether the car may pass laps beyond the number of answered questions.
+    // true = stop at Nth lap until Nth question is answered (gating on). false = never stop for unanswered.
+    private bool _gateByAnsweredCount = true;
     private bool _showAnim = false;
   private EasyRace? _easyRace;
   private MediumRace? _mediumRace;
@@ -127,6 +132,7 @@ else
   private int _finalPosition = 1;
   private int _finalTotalCars = 1;
   private string[] _rivalLabels = System.Array.Empty<string>();
+  private string _topic = "cornering";
   private List<RaceTrack.LapTelemetry> _telemetry = new();
   private CancellationTokenSource? _progressPumpCts;
   private const double WrongAnswerPenaltyDelta = -30; // px/s (milder penalty)
@@ -137,6 +143,7 @@ else
     var uri = Nav.ToAbsoluteUri(Nav.Uri);
     var query = QueryHelpers.ParseQuery(uri.Query);
     var difficulty = query.TryGetValue("difficulty", out var v) ? v.ToString() : "easy";
+    _topic = query.TryGetValue("topic", out var t) ? t.ToString() : "cornering";
     switch (difficulty.ToLowerInvariant())
     {
       case "easy":
@@ -146,7 +153,8 @@ else
         _timeLimit = 0;
         _label = "Easy";
         _isEasy = true;
-  _showAnim = true;
+        _showAnim = true;
+        _gateByAnsweredCount = true; // Easy: traditional gating on
         break;
       case "medium":
         _showExplanation = true;
@@ -155,7 +163,8 @@ else
         _timeLimit = 0;
         _label = "Medium";
         _isEasy = false;
-          _showAnim = true;
+        _showAnim = true;
+        _gateByAnsweredCount = false; // Medium: do not stop for unanswered
         _rivalLabels = new [] { "Blue", "Green", "Purple", "Orange", "Pink" };
         break;
       case "high":
@@ -165,7 +174,8 @@ else
         _timeLimit = 120;
         _label = "High";
         _isEasy = false;
-          _showAnim = true;
+        _showAnim = true;
+        _gateByAnsweredCount = true; // High: enforce stop-on-unanswered rule
         _rivalLabels = new [] { "Blue", "Green", "Purple", "Orange", "Pink" };
         break;
       default:

@@ -441,7 +441,8 @@ export function init(svgEl, opts = {}) {
             emitSpeed(true);
           }
           lastReportMs = nowMs;
-          // Gate: if enabled and user hasn't answered at least 'lapCounter' questions, pause at start (do not reset laps)
+          // Gate: if enabled and user hasn't answered at least 'lapCounter' questions,
+          // stop ONLY the user car at start/finish but keep the engine running so AI continue moving.
           if (gateByAnsweredCount && answeredCount < lapCounter) {
             // Snap to the exact start point, then stop
             try { traveled = startLen; render(traveled); } catch {}
@@ -450,8 +451,9 @@ export function init(svgEl, opts = {}) {
             // Keep current lap value visible while paused
             try { emitLap(true); } catch {}
             pausedForQuestion = true;
-            try { pause(); } catch {}
-            return true; // unregister this logger (we halted)
+            // Do NOT pause the whole animation; keep RAF running so AI keep advancing
+            // Keep logger active for future laps
+            return false;
           }
           // If the question is already answered, keep running and continue logging future laps
           wasOutside_log = false;
@@ -637,7 +639,7 @@ export function init(svgEl, opts = {}) {
             try { traveled = startLen; render(traveled); } catch {}
             try { setSpeed(0); } catch {}
             pausedForQuestion = true;
-            try { pause(); } catch {}
+            // Do not pause the whole engine; AI should continue moving
           }
           dlog('playForLaps:resolve');
           resolve();

@@ -191,7 +191,7 @@ else
       {
         <p class="mt-2 text-gray-600 text-sm">Waiting for car to complete the final lap…</p>
       }
-      @if (RaceMode)
+      @if (RaceMode && _showElapsed)
       {
             if (_externalPlacement.HasValue)
             {
@@ -226,6 +226,8 @@ else
   [Parameter] public bool Timed { get; set; } = false;
   // Difficulty label passed by parent (e.g., "Easy", "Medium", "High"). Default Easy.
   [Parameter] public string Difficulty { get; set; } = "Easy";
+  // Topic key (e.g., "cornering", "aerodynamics", "acceleration", "topspeed", "downforce"). Default cornering
+  [Parameter] public string Topic { get; set; } = "cornering";
   // When true (default), the quiz in StepMode will auto-start on first render.
   // Set to false to defer starting until the parent explicitly calls StartFromParent().
   [Parameter] public bool AutoStart { get; set; } = true;
@@ -263,6 +265,137 @@ else
 
   // The active list of questions for the current difficulty
   private List<Question> questions = new();
+
+  // --- Aerodynamics question sets ---
+  private readonly List<Question> _aeroEasy = new()
+  {
+    new(1, "What does aerodynamic downforce do?", new(){"A) Decreases tire grip","B) Pushes the car into the track for more grip","C) Reduces braking force","D) Increases fuel usage"}, 1,
+      explanationHtml: "Downforce increases the normal force on the tires, raising potential friction for cornering and braking."),
+    new(2, "Which part mainly generates front downforce?", new(){"A) Rear wing","B) Front wing","C) Floor diffuser","D) Mirrors"}, 1),
+    new(3, "What is 'drag' in aerodynamics?", new(){"A) Force aiding motion","B) Force opposing motion","C) Force turning the car","D) Force lifting the car"}, 1),
+    new(4, "DRS primarily reduces which force?", new(){"A) Downforce","B) Drag","C) Gravity","D) Tire friction"}, 1),
+    new(5, "Why are F1 floors important?", new(){"A) Cooling only","B) Generate ground-effect downforce","C) Hold batteries","D) Sound insulation"}, 1),
+    new(6, "'Dirty air' causes what?", new(){"A) More downforce","B) Less downforce for the following car","C) Better cooling","D) Higher grip"}, 1),
+    new(7, "What happens to downforce with speed?", new(){"A) Usually increases","B) Stays constant","C) Decreases","D) Flips direction"}, 0),
+    new(8, "Which angle matters for wing load?", new(){"A) Camber","B) Angle of attack","C) Toe","D) Caster"}, 1),
+    new(9, "Sidepods help mainly with?", new(){"A) Braking","B) Flow management & cooling","C) Steering","D) Refueling"}, 1),
+    new(10, "High downforce setup is best for?", new(){"A) Long straights","B) Tight corners","C) Drag races","D) Fuel saving only"}, 1),
+  };
+
+  private readonly List<Question> _aeroMedium = new()
+  {
+    new(1, "Increasing rear wing angle typically…", new(){"A) Lowers cornering grip","B) Increases downforce but adds drag","C) Removes drag","D) Has no effect"}, 1),
+    new(2, "A well-sealed floor edge does what?", new(){"A) Reduces ground effect","B) Increases underfloor suction","C) Increases lift","D) Only affects cooling"}, 1),
+    new(3, "In yaw, aero balance tends to shift…", new(){"A) Forward","B) Rearward","C) Not at all","D) Randomly"}, 0),
+    new(4, "Which increases straight-line speed most?", new(){"A) More downforce","B) Less drag","C) More camber","D) Higher tire pressure"}, 1),
+    new(5, "Vortex generators are used to…", new(){"A) Add lift","B) Energize boundary layer to delay separation","C) Cool brakes","D) Inflate tires"}, 1),
+    new(6, "Porpoising is…", new(){"A) Tyre graining","B) Aero oscillation from ground effect stall/recovery","C) Engine knock","D) Brake fade"}, 1),
+    new(7, "High rake in older cars tended to…", new(){"A) Increase underfloor expansion ratio","B) Reduce diffuser performance","C) Remove drag entirely","D) Freeze aero"}, 0),
+    new(8, "Following closely reduces…", new(){"A) Drag only","B) Downforce on the following car","C) Tire temperature","D) Brake temps"}, 1),
+    new(9, "Front wing flaps mainly tune…", new(){"A) Top speed","B) Aero balance & front downforce","C) Fuel mix","D) Suspension kinematics"}, 1),
+    new(10, "At Silverstone you typically choose…", new(){"A) Max drag","B) Higher downforce for fast bends","C) No downforce","D) Only DRS"}, 1),
+  };
+
+  private readonly List<Question> _aeroHigh = new()
+  {
+    new(1, "A diffuser’s expansion ratio governs…", new(){"A) Pressure recovery & suction strength","B) Fuel consumption","C) Brake bias","D) Camber wear"}, 0),
+    new(2, "Ground clearance sensitivity means…", new(){"A) DF rises linearly","B) DF collapses near stall heights","C) DF unaffected by ride","D) DF only at rear"}, 1),
+    new(3, "Wheel wake control targets…", new(){"A) Straight-line braking","B) Outwash/inwash to protect floor","C) Suspension kinematics","D) Tyre heating only"}, 1),
+    new(4, "Aero map ‘balance migration’ with speed…", new(){"A) Moves rearward only","B) Moves forward or rear depending on setup","C) Fixed","D) Non-physical"}, 1),
+    new(5, "Effective AoA under yaw typically…", new(){"A) Increases local stall risk","B) Reduces lift only","C) Removes vortices","D) Unrelated"}, 0),
+    new(6, "Beam wing reintroduction aids…", new(){"A) Drag only","B) Diffuser performance and DF","C) Fuel mixing","D) ERS deployment"}, 1),
+    new(7, "Upwash behind rear wing affects…", new(){"A) DRS rules","B) Slipstream strength & wake size","C) Brake temps","D) Tyre blankets"}, 1),
+    new(8, "Flow separation over a wing arises when…", new(){"A) Boundary layer can’t overcome adverse pressure gradient","B) Tires overheat","C) Fuel is low","D) Suspension rolls"}, 0),
+    new(9, "Ride height rake tuning in ground effect optimizes…", new(){"A) Diffuser expansion and sealing","B) Steering torque","C) ERS regen","D) Gear ratios"}, 0),
+    new(10, "Downforce vs. drag efficiency metric is…", new(){"A) L/D","B) μ","C) Cp","D) Cw"}, 0),
+  };
+
+  // --- Acceleration & Power question sets ---
+  private readonly List<Question> _accelEasy = new()
+  {
+    new(1, "Which improves 0–100 km/h most?", new(){"A) More mass","B) More traction","C) Flat battery","D) Narrow tires"}, 1),
+    new(2, "Power is…", new(){"A) Energy/time","B) Force·distance","C) Mass·acceleration","D) Speed/time"}, 0),
+    new(3, "Launch control helps by…", new(){"A) Increasing fuel","B) Managing wheelspin","C) Cooling brakes","D) Reducing drag"}, 1),
+    new(4, "Torque at wheels depends on…", new(){"A) Gear ratio","B) Tire radius","C) Both A and B","D) None"}, 2),
+    new(5, "ERS gives…", new(){"A) Extra electric power","B) Extra braking only","C) Less traction","D) More drag"}, 0),
+    new(6, "Traction limit is set by…", new(){"A) μ·N","B) ρ·V","C) P=F·v","D) m·g"}, 0),
+    new(7, "Shift lights prompt…", new(){"A) Earlier braking","B) Optimal upshifts","C) DRS use","D) Pit stop"}, 1),
+    new(8, "Grippy surface means…", new(){"A) Smaller μ","B) Larger μ","C) No change","D) Less N"}, 1),
+    new(9, "Cold tires cause…", new(){"A) More grip","B) Less grip","C) No effect","D) Explosions"}, 1),
+    new(10, "Shorter gearing usually…", new(){"A) Helps initial acceleration","B) Lowers torque","C) Reduces traction","D) Slows launch"}, 0),
+  };
+
+  private readonly List<Question> _accelMedium = new()
+  {
+    new(1, "Best launch is achieved when…", new(){"A) Wheels don’t slip at all","B) Small controlled slip near μ peak","C) Maximum burnout","D) Full throttle only"}, 1),
+    new(2, "Power-to-weight affects…", new(){"A) Top speed only","B) Acceleration strongly","C) Braking only","D) Cornering only"}, 1),
+    new(3, "Turbo lag is…", new(){"A) ERS delay","B) Boost response delay","C) Tire warmup","D) Brake fade"}, 1),
+    new(4, "Hybrid deployment strategy aims to…", new(){"A) Waste energy","B) Maximize average lap time","C) Lower corner speed","D) Reduce torque"}, 1),
+    new(5, "Traction control would…", new(){"A) Cut power on slip","B) Increase drag","C) Heat tires","D) Lock brakes"}, 0),
+    new(6, "Wheelspin means…", new(){"A) Slip ratio too high","B) Slip angle zero","C) Understeer","D) Perfect traction"}, 0),
+    new(7, "At Spa, climb to Kemmel is limited by…", new(){"A) Pure power and aero drag","B) Apex speed only","C) Brake balance","D) Camber"}, 0),
+    new(8, "Anti-stall protects…", new(){"A) Gearbox","B) Engine from stalling","C) Diffuser","D) DRS"}, 1),
+    new(9, "More rear weight at launch…", new(){"A) Increases rear traction","B) Decreases traction","C) No effect","D) Breaks gearbox"}, 0),
+    new(10, "Slip ratio is…", new(){"A) (wheel speed - ground)/ground","B) Lateral slip","C) Camber thrust","D) Yaw rate"}, 0),
+  };
+
+  private readonly List<Question> _accelHigh = new()
+  {
+    new(1, "Max acceleration on flat is limited by…", new(){"A) μ·g","B) ρ·v²","C) Crr","D) Cp"}, 0),
+    new(2, "Power limits acceleration when…", new(){"A) Traction-limited region","B) At higher speeds","C) At zero speed","D) In corners only"}, 1),
+    new(3, "Optimal shift strategy minimizes…", new(){"A) Time lost off-peak power","B) Fuel","C) Tire wear only","D) ERS"}, 0),
+    new(4, "Limited-slip differential helps by…", new(){"A) Locking wheels fully","B) Biasing torque to gripping wheel","C) Increasing drag","D) Cooling brakes"}, 1),
+    new(5, "ERS MGU-K deploy limit is…", new(){"A) Regulated per lap","B) Uncapped","C) Negative","D) Suspended"}, 0),
+    new(6, "Tyre longitudinal μ vs slip ratio…", new(){"A) Peaks then falls","B) Monotonic rising","C) Zero always","D) Random"}, 0),
+    new(7, "Elevation change affects…", new(){"A) Normal load and available traction","B) Nothing","C) Only aero","D) ERS only"}, 0),
+    new(8, "Drag force is…", new(){"A) 1/2 ρ Cd A v²","B) μ·N","C) m·g","D) P/t"}, 0),
+    new(9, "Optimal launch clutch slip…", new(){"A) Zero","B) Non-zero to stay near μ peak","C) Infinite","D) Reverse"}, 1),
+    new(10, "Traction circle links…", new(){"A) Longitudinal & lateral tire limits","B) Fuel & ERS","C) Aero & yaw","D) Brake temp & wear"}, 0),
+  };
+
+  // --- Top speed & Slipstream ---
+  private readonly List<Question> _topEasy = new()
+  {
+    new(1, "Slipstreaming reduces…", new(){"A) Drag","B) Downforce","C) Fuel","D) Grip"}, 0),
+    new(2, "Top speed depends largely on…", new(){"A) Drag and power","B) Tire color","C) Brake size","D) Fuel octane"}, 0),
+    new(3, "DRS helps by…", new(){"A) Closing wing","B) Opening flap to cut drag","C) More mass","D) Heating tires"}, 1),
+    new(4, "Long straights favor…", new(){"A) Low-drag setup","B) High downforce","C) Nothing","D) Heavy fuel"}, 0),
+    new(5, "Speedometer measures…", new(){"A) Acceleration","B) Instant speed","C) Fuel","D) G-forces"}, 1),
+    new(6, "CdA is…", new(){"A) Drag coefficient × area","B) Corner radius","C) Tyre stiffness","D) Brake bias"}, 0),
+    new(7, "Speed vs power at v∞…", new(){"A) P ∝ v³ for drag","B) P ∝ v","C) P ∝ v²","D) P ∝ 1/v"}, 0),
+    new(8, "Monza rewards…", new(){"A) High drag","B) Low drag","C) No gear shifts","D) Slow apexes"}, 1),
+    new(9, "Tucking behind increases…", new(){"A) Air resistance","B) Slipstream benefit","C) Tyre wear","D) Brake temp"}, 1),
+    new(10, "Wind direction can…", new(){"A) Change effective drag","B) Only cool engine","C) Do nothing","D) Change tire color"}, 0),
+  };
+
+  private readonly List<Question> _topMedium = new()
+  {
+    new(1, "Drag force formula is…", new(){"A) 1/2 ρ C_d A v²","B) μ·N","C) m·g","D) Cp"}, 0),
+    new(2, "Lower wing angle usually…", new(){"A) Increases drag","B) Reduces drag and downforce","C) No change","D) Only heats tires"}, 1),
+    new(3, "Slipstream length depends on…", new(){"A) Wake size and speed","B) Tire type","C) Fuel","D) Brake bias"}, 0),
+    new(4, "Gearing for v_max tends to…", new(){"A) Match power peak","B) Random","C) Match torque peak","D) Never shift"}, 0),
+    new(5, "Crosswind can…", new(){"A) Add side force","B) Increase μ","C) Lower mass","D) Reduce gravity"}, 0),
+    new(6, "ERS helps v_max mostly by…", new(){"A) Adding power on straights","B) Reducing drag","C) Cooling tires","D) Adding mass"}, 0),
+    new(7, "Engine mapping affects…", new(){"A) Torque delivery & response","B) Aerodynamics","C) Tyre compound","D) Ride height only"}, 0),
+    new(8, "Tyre pressure at top speed…", new(){"A) Influences rolling resistance","B) Sets camber","C) Sets yaw","D) Sets porpoise"}, 0),
+    new(9, "Brake ducts taped reduce…", new(){"A) Cooling drag but risk temp rise","B) Lift","C) Mass","D) Yaw"}, 0),
+    new(10, "Monza setup aims for…", new(){"A) Max downforce","B) Balanced low drag","C) Wet trim only","D) Anti-DRS"}, 1),
+  };
+
+  private readonly List<Question> _topHigh = new()
+  {
+    new(1, "At v∞, P_required roughly scales with…", new(){"A) v","B) v²","C) v³","D) 1/v"}, 2),
+    new(2, "Laminar→turbulent transition can…", new(){"A) Reduce separation over certain shapes","B) Eliminate drag","C) Freeze μ","D) Remove lift"}, 0),
+    new(3, "Minimum drag is reached when…", new(){"A) Downforce=0","B) D/(L) efficiency optimized for track","C) ERS full","D) Tyres cold"}, 1),
+    new(4, "Slipstream overtake timing aims to…", new(){"A) Finish pass before braking zone","B) Start pass mid-corner","C) Lift off early","D) Avoid DRS"}, 0),
+    new(5, "CdA reduction of 5% changes v∞ by ≈…", new(){"A) ~1.6%","B) ~5%","C) ~3%","D) ~10%"}, 0,
+      explanationHtml: "Since P ∝ v³ and P ∝ CdA, v ∝ (1/CdA)^(1/3). A 5% drop in CdA yields about 1.6% gain in v∞."),
+    new(6, "Yawed flow on straights produces…", new(){"A) Side force and asymmetric drag","B) No effect","C) More lift only","D) Pure downforce"}, 0),
+    new(7, "ERS harvest vs deploy balance aims to…", new(){"A) Maximise lap average power","B) Randomize torque","C) Heat tires","D) Cool fuel"}, 0),
+    new(8, "Rolling resistance power scales ~ with…", new(){"A) v","B) v²","C) v³","D) 1/v"}, 0),
+    new(9, "Wake management devices target…", new(){"A) Reduce base drag and improve flow attachment","B) Cooling only","C) Braking only","D) Steering only"}, 0),
+    new(10, "DRS legality box defines…", new(){"A) Geometric limits of the flap opening","B) Tyre pressures","C) Lap count","D) ERS limits"}, 0),
+  };
 
   // Easy (and default) question set
   private readonly List<Question> _easyQuestions = new()
@@ -401,6 +534,90 @@ else
         "C) Because load has no effect on grip",
         "D) Because load sensitivity only applies to braking"
       }, 0),
+  };
+
+  // High (Hard) question set
+  private readonly List<Question> _highQuestions = new()
+  {
+    new(1, "Which factor most influences the optimal slip angle of an F1 tire in a corner?",
+      new() {
+        "A) Tire compound stiffness",
+        "B) Driver steering input speed",
+        "C) Track elevation",
+        "D) Fuel tank size"
+      }, 0),
+
+    new(2, "When drivers talk about “rotation” in the middle of a corner, what are they referring to?",
+      new() {
+        "A) Wheel spin",
+        "B) The car’s yaw angle change",
+        "C) Steering wheel turning radius",
+        "D) Brake disc rotation"
+      }, 1),
+
+    new(3, "Why do high-speed corners often require less steering angle than slow corners?",
+      new() {
+        "A) Tires overheat at low speeds",
+        "B) Aerodynamic downforce increases grip at higher speeds",
+        "C) Steering systems are speed-sensitive",
+        "D) Fuel load drops in fast corners"
+      }, 1),
+
+    new(4, "How does increasing rear wing angle affect cornering?",
+      new() {
+        "A) Increases downforce, improves cornering but reduces top speed",
+        "B) Decreases downforce, improves top speed but reduces cornering grip",
+        "C) Has no effect on cornering",
+        "D) Only affects tire wear"
+      }, 0),
+
+    new(5, "Why do banked corners (positive camber) allow higher cornering speeds?",
+      new() {
+        "A) They reduce centrifugal force",
+        "B) They reduce car weight",
+        "C) They provide an additional component of normal force acting toward the center of the turn",
+        "D) They reduce aerodynamic drag"
+      }, 2),
+
+    new(6, "At very high lateral G-forces, which part of the tire works hardest to maintain grip?",
+      new() {
+        "A) Center tread",
+        "B) Inner shoulder",
+        "C) Outer shoulder",
+        "D) Sidewall"
+      }, 2),
+
+    new(7, "Why do F1 engineers analyze “minimum speed at apex” data?",
+      new() {
+        "A) It shows engine efficiency",
+        "B) It predicts tire degradation",
+        "C) It reveals driver’s cornering efficiency",
+        "D) It determines pit stop strategy"
+      }, 2),
+
+    new(8, "What is the main aerodynamic challenge of following another car closely through a corner?",
+      new() {
+        "A) Increased drag",
+        "B) Reduced downforce due to dirty air",
+        "C) Sudden tire overheating",
+        "D) Steering wheel vibrations"
+      }, 1),
+
+    new(9, "Which driving technique helps reduce mid-corner understeer?",
+      new() {
+        "A) Short-shifting",
+        "B) Lifting the throttle slightly",
+        "C) Harder braking",
+        "D) Straight-line acceleration"
+      }, 1),
+
+    new(10, "Why are progressive steering inputs important in high-speed cornering?",
+      new() {
+        "A) To cool the tires evenly",
+        "B) To prevent sudden loss of grip",
+        "C) To reduce brake wear",
+        "D) To keep DRS active"
+      }, 1),
   };
 
   private void Select(int id, int optionIndex)
@@ -597,11 +814,36 @@ else
 
   protected override void OnParametersSet()
   {
-    // Select questions based on difficulty; default to Easy for unknown values.
+    // Select questions based on topic and difficulty; default to Cornering/Easy for unknowns.
     var d = (Difficulty ?? "Easy").Trim();
+    var t = (Topic ?? "cornering").Trim().ToLowerInvariant();
     var isMedium = d.Equals("Medium", StringComparison.OrdinalIgnoreCase);
-    // High currently uses Easy questions unless a separate set is added later
-    questions = isMedium ? _mediumQuestions : _easyQuestions;
+    var isHigh = d.Equals("High", StringComparison.OrdinalIgnoreCase);
+    if (t == "cornering")
+    {
+      questions = isHigh ? _highQuestions : (isMedium ? _mediumQuestions : _easyQuestions);
+    }
+    else if (t == "aerodynamics")
+    {
+      questions = isHigh ? _aeroHigh : (isMedium ? _aeroMedium : _aeroEasy);
+    }
+    else if (t == "acceleration")
+    {
+      questions = isHigh ? _accelHigh : (isMedium ? _accelMedium : _accelEasy);
+    }
+    else if (t == "topspeed")
+    {
+      questions = isHigh ? _topHigh : (isMedium ? _topMedium : _topEasy);
+    }
+    else if (t == "downforce")
+    {
+      // Downforce topic can reuse the aerodynamics sets to start with
+      questions = isHigh ? _aeroHigh : (isMedium ? _aeroMedium : _aeroEasy);
+    }
+    else
+    {
+      questions = isHigh ? _highQuestions : (isMedium ? _mediumQuestions : _easyQuestions);
+    }
     base.OnParametersSet();
   }
 
