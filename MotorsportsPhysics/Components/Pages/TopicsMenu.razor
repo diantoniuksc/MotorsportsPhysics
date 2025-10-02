@@ -1,0 +1,104 @@
+@page "/topics"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Nav
+
+<title>Apex Physics - Grand Prix Selection</title>
+
+<div class="relative min-h-screen w-full">
+  <!-- Full-page ambient glow background (spans beyond the body and up to page edges) -->
+  <div class="fixed inset-0 -z-10 pointer-events-none overflow-visible">
+    <div class="absolute -top-[20vh] -left-[20vw] w-[60vw] h-[60vw] bg-primary/10 dark:bg-primary/5 rounded-full blur-[120px]"></div>
+    <div class="absolute -bottom-[25vh] -right-[20vw] w-[55vw] h-[55vw] bg-primary/20 dark:bg-primary/10 rounded-full blur-[120px]"></div>
+  </div>
+
+  <div class="relative z-10 flex h-full grow flex-col">
+
+    <main class="container mx-auto px-6 py-12 flex-1">
+      <div class="max-w-4xl mx-auto">
+        <div class="text-center mb-12">
+          <h2 class="text-4xl md:text-5xl font-bold tracking-tighter leading-tight">Select Your Grand Prix</h2>
+          <p class="mt-4 text-lg text-text-muted-light dark:text-text-muted-dark max-w-2xl mx-auto">Each circuit is a new chapter in physics. Choose your race to begin.</p>
+        </div>
+
+        <div class="space-y-6">
+          @* Monaco: Cornering & Braking *@
+          <div class="group grid md:grid-cols-5 gap-6 p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="md:col-span-2 rounded-lg overflow-hidden">
+              <div class="w-full h-full bg-center bg-no-repeat bg-cover aspect-video md:aspect-auto" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBb1iZuGfeKkjcY_vUeDUg-ZWc9_sib6nQ9VDBzD1eiyCAXUY2v98fpHeMaRN4MRbmt11fBg1MnUSs5YkdgvmnFOoR5e6zg40T8iGM-U4ZmAxhBseDcX5POt778wexm_qOAufVpGUf4Jq-QgECgGui7RxbCHEG8yoL0MYm8u5lJRnDSZIlSve1kUG7WyYJ1zru_fmxhRf-lHAxXHE2RdG4i_1O6Ur98aAggrzmvaa8nBSv0Xa4xb1T3rXLJ88AIEFqMRaIO_GOYeswC");'></div>
+            </div>
+            <div class="md:col-span-3 flex flex-col justify-center p-4">
+              <h3 class="text-xl font-bold text-text-light dark:text-text-dark">Monaco Grand Prix</h3>
+              <p class="text-text-muted-light dark:text-text-muted-dark mt-2 mb-4">Master the physics of cornering and braking on the iconic street circuit.</p>
+              <a class="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 rounded-lg bg-primary text-white font-bold tracking-wide transform transition-all duration-300 hover:bg-red-700 hover:shadow-glow-primary focus:outline-none focus:ring-4 focus:ring-primary/50" href="/race-menu?topic=cornering">
+                <span>Start Race</span>
+                <span class="material-symbols-outlined">→</span>
+              </a>
+            </div>
+          </div>
+
+          @* Silverstone: Aerodynamics *@
+          <div class="group grid md:grid-cols-5 gap-6 p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="md:col-span-2 rounded-lg overflow-hidden">
+              <div class="w-full h-full bg-center bg-no-repeat bg-cover aspect-video md:aspect-auto" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCRh0gFXpa6TsZ5amRf25pWUL1D6JkAP9j2W3ez4Kg8K0UVo-zlvmcnMbY5JkwCjzYQ9SLQHWuls7nFYi_gxrm_29hUZdOoYamCcvYKYjQwgnn3FPJJSuToSp9ekD8JXqOqE-2nYoZAJ4ePPTHUrF6sD9dhlbpez91NPJh_mA3Dsqs0cRRy4S1ZbFH6Ha8W5ANnpn_BtQLApnGogUCe5cqgKMhy9hwlWe7EePu2R_3zH62OYF5FRUVJ7jOl2Fw0ikH7FQHAXZ-2NnyI");'></div>
+            </div>
+            <div class="md:col-span-3 flex flex-col justify-center p-4">
+              <h3 class="text-xl font-bold text-text-light dark:text-text-dark">Silverstone Grand Prix</h3>
+              <p class="text-text-muted-light dark:text-text-muted-dark mt-2 mb-4">Learn about aerodynamics and high-speed stability on this historic track.</p>
+              <a class="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 rounded-lg bg-primary text-white font-bold tracking-wide transform transition-all duration-300 hover:bg-red-700 hover:shadow-glow-primary focus:outline-none focus:ring-4 focus:ring-primary/50" href="/race-menu?topic=aerodynamics">
+                <span>Start Race</span>
+                <span class="material-symbols-outlined">→</span>
+              </a>
+            </div>
+          </div>
+
+          @* Spa: Acceleration & Power *@
+          <div class="group grid md:grid-cols-5 gap-6 p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="md:col-span-2 rounded-lg overflow-hidden">
+              <div class="w-full h-full bg-center bg-no-repeat bg-cover aspect-video md:aspect-auto" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDZOV_Cm6dMdCs1-k8YGMpaSfhSkBmoC3CsjG1R6_hRj4q8Oj6E_hpDoz4jZ_WhnlCHMd7W_GO2xC7wy9p6o2S7c-_-mu6vTzSjUToJ9nKGME_kAi9I0QDdX1mHEQRPc_NPSDcJHBOtiN921Ju5OT59_XycxggUXccd9CxEoLdkvCkHleuJbqO6dyOQaiitJwKqPmV0UvMuM6H2dauRw3s_IynNHaG4RbHu2oCkaXcSQeVcwQLVulcf-QpEYAUGhMcl979iwi9TbXur");'></div>
+            </div>
+            <div class="md:col-span-3 flex flex-col justify-center p-4">
+              <h3 class="text-xl font-bold text-text-light dark:text-text-dark">Spa-Francorchamps Grand Prix</h3>
+              <p class="text-text-muted-light dark:text-text-muted-dark mt-2 mb-4">Explore the physics of acceleration and power delivery on the Belgian circuit.</p>
+              <a class="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 rounded-lg bg-primary text-white font-bold tracking-wide transform transition-all duration-300 hover:bg-red-700 hover:shadow-glow-primary focus:outline-none focus:ring-4 focus:ring-primary/50" href="/race-menu?topic=acceleration">
+                <span>Start Race</span>
+                <span class="material-symbols-outlined">→</span>
+              </a>
+            </div>
+          </div>
+
+          @* Monza: Top speed & Slipstream *@
+          <div class="group grid md:grid-cols-5 gap-6 p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="md:col-span-2 rounded-lg overflow-hidden">
+              <div class="w-full h-full bg-center bg-no-repeat bg-cover aspect-video md:aspect-auto" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBtrhNfdBCy45-GJwJHXqNJr7avV4SJyXdif2S40nRYGQb1_P4O3aqmOHS9sMErJTidUHDKmhZiY9NKE16nm0s7EAz2XewZY_wXsm3QJ038RsEIxgmETIPaRxSdEO8RF73dJBFlBy0scfa7SDsIbMTPBY-9Xp6kh5wlNkXElw3AqYGX5pfuCLyzyRT_cQZPEl9uUA7FKhWcqlnq7ICASi55wiHHuuxSze_-kCyepZVgkPG_V8KgtKXjmmpqu7obWFyK3s65ShUjrX_p");'></div>
+            </div>
+            <div class="md:col-span-3 flex flex-col justify-center p-4">
+              <h3 class="text-xl font-bold text-text-light dark:text-text-dark">Monza Grand Prix</h3>
+              <p class="text-text-muted-light dark:text-text-muted-dark mt-2 mb-4">Understand the principles of top speed and slipstream on the fastest track.</p>
+              <a class="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 rounded-lg bg-primary text-white font-bold tracking-wide transform transition-all duration-300 hover:bg-red-700 hover:shadow-glow-primary focus:outline-none focus:ring-4 focus:ring-primary/50" href="/race-menu?topic=topspeed">
+                <span>Start Race</span>
+                <span class="material-symbols-outlined">→</span>
+              </a>
+            </div>
+          </div>
+
+          @* Suzuka: Downforce & Tire Management *@
+          <div class="group grid md:grid-cols-5 gap-6 p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 transform hover:-translate-y-1">
+            <div class="md:col-span-2 rounded-lg overflow-hidden">
+              <div class="w-full h-full bg-center bg-no-repeat bg-cover aspect-video md:aspect-auto" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDUuayhP0KTl3VWb5IJRBaOmycQXR_5Au_tq_Eag5TUse9S_PX8w_JY4yoK5KFulfnhoIXPrJCJYEPQFXJi05s_9vo1bjqvKO5jCBeve7q8dt4MbTHFJ9BrK1OfJbsEkYosfdBHCmaKI0Xi-YXCzBhAAbl-KZq1S6wYpGvqb_q1etxUe5ztGtqpIuGXryXBiPIbGGsnAA6Syx5kzRAo7MWHzk9tD2DQXZqZyjLKqWLekSVe-ovcLYuqmda5ZNVO7DY_NofYiQJugqM_");'></div>
+            </div>
+            <div class="md:col-span-3 flex flex-col justify-center p-4">
+              <h3 class="text-xl font-bold text-text-light dark:text-text-dark">Suzuka Grand Prix</h3>
+              <p class="text-text-muted-light dark:text-text-muted-dark mt-2 mb-4">Dive into downforce and tire management on the demanding Japanese circuit.</p>
+              <a class="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 rounded-lg bg-primary text-white font-bold tracking-wide transform transition-all duration-300 hover:bg-red-700 hover:shadow-glow-primary focus:outline-none focus:ring-4 focus:ring-primary/50" href="/race-menu?topic=downforce">
+                <span>Start Race</span>
+                <span class="material-symbols-outlined">→</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
