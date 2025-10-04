@@ -1,10 +1,22 @@
+using Microsoft.EntityFrameworkCore;
 using MotorsportsPhysics.Components;
+using MotorsportsPhysics.Data;
+using MotorsportsPhysics.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddDbContext<MotorsportsDbContext>(options =>
+{
+    var cs = builder.Configuration.GetConnectionString("DefaultConnection");
+    options.UseSqlServer(cs);
+});
+
+builder.Services.AddSingleton<PasswordSecurityService>();
+
 
 var app = builder.Build();
 

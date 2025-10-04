@@ -1,0 +1,110 @@
+﻿@using System;
+@using Microsoft.Data.SqlClient;
+@using System.Text;
+@using MotorsportsPhysics.Models;
+@using MotorsportsPhysics.Services;
+@using MotorsportsPhysics.Data;
+
+@inject MotorsportsDbContext _context
+@inject PasswordSecurityService PasswordSecurity
+
+@page "/signin"
+
+<div class="relative flex min-h-[85vh] w-full flex-col items-center justify-center overflow-x-hidden p-4">
+    <div class="absolute inset-0 z-0 h-full w-full bg-cover bg-center opacity-20" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuC3Lyi1FcGUPviuKqeB45wb7ihIzIbxvszyNRt6XNseAiP3-TfypdFa_TL_gRop8B38tx4AfqL3w3PfC8BXA45c9XNWMn0WCLUFJgREKm6T4Hr53xRhh5VNnVXmwBIWSmFLd4_5YWhDAvaQIyQFJ95JtPU0rXOAGRMmW78dIT_-KC4nlTIGq6GULN_w2KAegh8jnv6MZOOLuwYK72a5RppdaUOGThVjJ1f7dD1tVn-2qMHmoxiekWqeUWZoUiK7j61IPXF6E6w_hosK");'></div>
+    <div class="absolute inset-0 z-10 bg-gradient-to-b from-transparent to-background-light dark:to-background-dark"></div>
+
+    <div class="relative z-20 w-full max-w-md rounded-lg bg-background-light/80 p-8 shadow-2xl backdrop-blur-sm dark:bg-background-dark/80">
+        <div class="w-full max-w-xs mx-auto">
+            <img alt="F1 Physics Logo" class="mx-auto h-24 w-auto drop-shadow-lg" src="favicon.png" />
+        </div>
+        <div class="mt-6 text-center">
+            <h1 class="text-2xl font-bold tracking-tight text-black dark:text-white">Welcome to F1 Physics</h1>
+            <p class="mt-2 text-sm text-black/70 dark:text-white/70">Enter the race. Master the science.</p>
+        </div>
+
+        <EditForm class="mt-8 w-full space-y-4" Model="@this" OnValidSubmit="HandleSubmit">
+            <div>
+                <label class="sr-only" for="username">Username</label>
+                <InputText id="username" class="w-full rounded border-none bg-black/10 px-4 py-3 text-black placeholder-black/50 ring-1 ring-inset ring-transparent transition focus:bg-white focus:text-black focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-white/10 dark:text-white dark:placeholder-white/50 dark:focus:bg-background-dark dark:focus:text-white" @bind-Value="UserName" placeholder="Username" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="sr-only" for="first">First name</label>
+                    <InputText id="first" class="w-full rounded border-none bg-black/10 px-4 py-3 text-black placeholder-black/50 ring-1 ring-inset ring-transparent transition focus:bg-white focus:text-black focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-white/10 dark:text-white dark:placeholder-white/50 dark:focus:bg-background-dark dark:focus:text-white" @bind-Value="FirstName" placeholder="First name" />
+                </div>
+                <div>
+                    <label class="sr-only" for="last">Last name</label>
+                    <InputText id="last" class="w-full rounded border-none bg-black/10 px-4 py-3 text-black placeholder-black/50 ring-1 ring-inset ring-transparent transition focus:bg-white focus:text-black focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-white/10 dark:text-white dark:placeholder-white/50 dark:focus:bg-background-dark dark:focus:text-white" @bind-Value="LastName" placeholder="Last name" />
+                </div>
+            </div>
+            <div>
+                <label class="sr-only" for="password">Password</label>
+                <InputText type="password" id="password" class="w-full rounded border-none bg-black/10 px-4 py-3 text-black placeholder-black/50 ring-1 ring-inset ring-transparent transition focus:bg-white focus:text-black focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-white/10 dark:text-white dark:placeholder-white/50 dark:focus:bg-background-dark dark:focus:text-white" @bind-Value="Password" placeholder="Password" />
+            </div>
+            <button class="w-full rounded bg-primary py-3 text-sm font-bold text-white shadow-lg transition-transform duration-200 ease-in-out hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background-light dark:focus-visible:ring-offset-background-dark" type="submit">Sign In</button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="mt-4 text-center text-red-600">@_error</div>
+        }
+        @if (!string.IsNullOrEmpty(_success))
+        {
+            <div class="mt-4 text-center text-green-600">@_success</div>
+        }
+
+        <div class="mt-6 text-center">
+            <a class="text-sm text-black/70 underline-offset-4 hover:text-primary hover:underline dark:text-white/70 dark:hover:text-primary" href="#">Don't have an account? Sign Up</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string FirstName { get; set; } = string.Empty;
+    private string LastName { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public DateTime PasswordUpdatedAt { get; set; }
+    public byte[] ProfilePicture { get; set; } = Array.Empty<byte>();
+    public string ProfilePictureType { get; set; } = string.Empty;
+    string _error = string.Empty;
+    string _success = string.Empty;
+
+    private async Task HandleSubmit()
+    {
+        await SaveUserInfo();
+    }
+
+    private async Task SaveUserInfo()
+    {
+            User test = new User{
+            FirstName = FirstName,
+            LastName = LastName,
+            UserName = UserName,
+            ProfilePicture = ProfilePicture,
+            ProfilePictureType = ProfilePictureType
+        };
+
+        try
+        {
+            _error = string.Empty;
+            _success = string.Empty;
+
+            // Hash password with salt + pepper (from Key Vault) before saving
+            var (hash, salt) = await PasswordSecurity.HashWithSaltAndPepperAsync(Password);
+            test.PasswordHashPHC = hash;
+            test.PasswordSalt = salt;
+            test.PasswordUpdatedAt = DateTime.UtcNow;
+
+            _context.Users.Add(test);
+            await _context.SaveChangesAsync();
+
+            _success = "Saved to database using Entra (AAD) connection.";
+        }
+        catch (Exception ex)
+        {
+            _error = $"DB error: {ex.Message}";
+        }
+    }
+}

@@ -1,11 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.12.35514.174 d17.12
+VisualStudioVersion = 17.12.35514.174
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MotorsportsPhysics", "MotorsportsPhysics.csproj", "{94E00975-E81D-4DD4-90D1-E27CE192B1A7}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "lab2", "..\..\DUT\A_P\lab2\lab2.csproj", "{B83CA1A8-BB88-485B-B0BF-D35A853BCEB2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +15,6 @@ Global
 		{94E00975-E81D-4DD4-90D1-E27CE192B1A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{94E00975-E81D-4DD4-90D1-E27CE192B1A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{94E00975-E81D-4DD4-90D1-E27CE192B1A7}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B83CA1A8-BB88-485B-B0BF-D35A853BCEB2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B83CA1A8-BB88-485B-B0BF-D35A853BCEB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B83CA1A8-BB88-485B-B0BF-D35A853BCEB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B83CA1A8-BB88-485B-B0BF-D35A853BCEB2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

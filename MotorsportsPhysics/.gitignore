@@ -444,3 +444,5 @@ tools/
 # Temporary folders
 tmp/
 temp/
+
+appsettings.json
